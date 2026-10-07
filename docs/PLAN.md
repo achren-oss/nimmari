@@ -6,7 +6,7 @@
 - Contributions: DCO (`git commit -s`). Contact: GitHub private vulnerability reporting, no email.
 - Signatures: v1 is an eIDAS Simple Electronic Signature (disclaimer). PAdES + RFC 3161 timestamp in v1.1.
 - HTML form mode included in v1.
-- Project site: puumerkki.joakimachren.com. Maintainer's private instance moves to esign.joakimachren.com.
+- Project site: puumerkki.joakimachren.com.
 
 ## Hosting
 - **Primary (recommended for users, used in tutorial videos): Render + Turso.** Both have free tiers. Render runs the Docker image (Chromium included); Turso is the database. Free Render instances sleep when idle (first request is slow).

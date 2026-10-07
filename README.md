@@ -1,5 +1,11 @@
 # Puumerkki
 
+[![CI](https://github.com/puumerkki/puumerkki/actions/workflows/ci.yml/badge.svg)](https://github.com/puumerkki/puumerkki/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Image: ghcr.io/puumerkki/puumerkki](https://img.shields.io/badge/image-ghcr.io%2Fpuumerkki%2Fpuumerkki-2496ED?logo=docker&logoColor=white)](https://github.com/puumerkki/puumerkki/pkgs/container/puumerkki)
+
+> **Signatures:** Puumerkki produces eIDAS *Simple* Electronic Signatures (SES) only, not AdES/QES. See [Legal disclaimer](#legal-disclaimer).
+
 Self-hosted headless e-signatures. Your documents never leave your server.
 
 Puumerkki is Finnish for “your John Hancock”. Upload a PDF or an HTML form, prepare its fields, and send a signing link. Run it on infrastructure you control, with a web UI and HTTP endpoints for integrations. Puumerkki is self-host only; there is no hosted offering.
@@ -69,7 +75,7 @@ Puumerkki is self-host only. Pick one:
 
 - **Render + Turso (recommended):** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
-- **Any Docker host:** `docker build -t puumerkki .` then
+- **Any Docker host:** use the prebuilt image `ghcr.io/puumerkki/puumerkki:1.0.0` (published from `v*` tags), or `docker build -t puumerkki .`, then
   `docker run -p 3000:3000 -v puumerkki-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host puumerkki`.
   Without `DATABASE_URL` the image uses a SQLite file at `/data/puumerkki.db` (mount a volume). Migrations run on start; `/api/health` reports status.
 

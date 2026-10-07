@@ -18,12 +18,12 @@ services:
       # Random 32+ byte secret for session signing.
       - key: BETTER_AUTH_SECRET
         generateValue: true
-      # Public HTTPS origin of this service. CHANGE THESE to your own
-      # service URL (https://<your-service-name>.onrender.com or custom domain).
+      # Public HTTPS origin of this service, e.g. https://<your-service>.onrender.com
+      # or your custom domain. Set both after the first deploy.
       - key: BETTER_AUTH_URL
-        value: https://puumerkki.onrender.com
+        sync: false
       - key: APP_URL
-        value: https://puumerkki.onrender.com
+        sync: false
       # Optional: service-account API access.
       - key: PUUMERKKI_API_KEY
         sync: false

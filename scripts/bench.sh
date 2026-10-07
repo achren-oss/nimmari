@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Puumerkki latency bench (Render free tier test).
-# Usage: BASE_URL=https://puumerkki.onrender.com ./bench.sh
+# Usage: BASE_URL=https://<your-service>.onrender.com ./bench.sh
 # Needs: PUUMERKKI_API_KEY in the environment (optionally from $BENCH_ENV_FILE).
 # Server side must have PUUMERKKI_API_KEY (same value) and PUUMERKKI_API_OWNER_ID set,
 # where the owner id is an existing user row created by:

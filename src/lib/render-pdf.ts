@@ -1,4 +1,7 @@
 import puppeteer, { type Browser } from "puppeteer-core";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Inline print rules — same as the in-browser ?print=1 path so the rendered
 // PDF matches what users have always seen on "View as PDF". Forces background
@@ -58,7 +61,20 @@ async function launchBrowser(): Promise<Browser> {
     process.env.PUPPETEER_NO_SANDBOX === "1"
       ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
       : [];
-  return puppeteer.launch({ executablePath, headless: true, args });
+  // Some hosts (e.g. Render) give Chromium no usable HOME/config dir, so the
+  // crashpad handler aborts with "--database is required". Disable crash
+  // reporting and point profile/config dirs at a fresh temp directory.
+  const userDataDir = await mkdtemp(join(tmpdir(), "puumerkki-chrome-"));
+  args.push("--disable-crash-reporter", "--disable-breakpad", "--no-first-run", "--disable-gpu");
+  const env = {
+    ...process.env,
+    HOME: userDataDir,
+    XDG_CONFIG_HOME: userDataDir,
+    XDG_CACHE_HOME: userDataDir,
+  };
+  const browser = await puppeteer.launch({ executablePath, headless: true, args, userDataDir, env });
+  browser.once("disconnected", () => void rm(userDataDir, { recursive: true, force: true }));
+  return browser;
 }
 
 export async function renderHtmlToPdf(html: string): Promise<Uint8Array> {

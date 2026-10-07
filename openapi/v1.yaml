@@ -1,0 +1,3873 @@
+openapi: "3.1.0"
+info:
+  title: "Puumerkki Headless API"
+  version: "1.0.0-draft"
+  description: "Proposed self-hosted headless API v1; not yet implemented. eIDAS SES only. PAdES and RFC 3161 are planned for v1.1. Keys select workspace and live/test mode. All collections use limit/starting_after and data/has_more. Bearer API-key scopes are documented per operation (HTTP bearer security schemes do not express scopes). See docs/api-v1-design.md for lifecycle, evidence and migration decisions."
+  license:
+    name: "AGPL-3.0-only"
+    identifier: "AGPL-3.0-only"
+servers:
+  -
+    url: "{origin}"
+    description: "Your self-hosted Puumerkki deployment."
+    variables:
+      origin:
+        default: "https://puumerkki.your-domain.tld"
+        description: "Public origin of your deployment (scheme and host, no trailing slash)."
+tags:
+  -
+    name: "Workspace"
+    description: "Credential-bound workspace metadata."
+  -
+    name: "Envelopes"
+    description: "Draft preparation and lifecycle actions."
+  -
+    name: "Documents"
+    description: "PDF and HTML source documents."
+  -
+    name: "Recipients"
+    description: "Signer, approver and CC routing."
+  -
+    name: "Fields"
+    description: "Recipient-assigned typed fields and prefill."
+  -
+    name: "Signing"
+    description: "Short-lived embedded signing bootstrap."
+  -
+    name: "Evidence"
+    description: "Immutable final artifacts and hash-chain events."
+  -
+    name: "Webhooks"
+    description: "Outbound event subscriptions and delivery management."
+  -
+    name: "ApiKeys"
+    description: "Scoped revocable workspace credentials."
+security:
+  -
+    bearerApiKey: []
+paths:
+  "/v1/workspace":
+    get:
+      operationId: "getWorkspace"
+      tags:
+        - "Workspace"
+      summary: "Read current workspace"
+      description: "Required scope: any valid key."
+      x-required-scopes: []
+      responses:
+        200:
+          description: "Read current workspace."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+  "/v1/envelopes":
+    get:
+      operationId: "listEnvelopes"
+      tags:
+        - "Envelopes"
+      summary: "List envelopes"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "List envelopes."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/EnvelopeList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+        -
+          name: "status"
+          in: "query"
+          required: false
+          description: "Filter by current lifecycle status."
+          schema:
+            type: "string"
+            enum:
+              - "draft"
+              - "sent"
+              - "completed"
+              - "declined"
+              - "voided"
+              - "expired"
+    post:
+      operationId: "createEnvelope"
+      tags:
+        - "Envelopes"
+      summary: "Create draft envelope"
+      description: "Required scope: envelopes:write. Expiry defaults to 30 days from creation. Mode derives from the key."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        201:
+          description: "Create draft envelope."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/EnvelopeCreate"
+  "/v1/envelopes/{envelope_id}":
+    get:
+      operationId: "getEnvelope"
+      tags:
+        - "Envelopes"
+      summary: "Read envelope"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "Read envelope."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+    patch:
+      operationId: "updateEnvelope"
+      tags:
+        - "Envelopes"
+      summary: "Update draft envelope"
+      description: "Required scope: envelopes:write."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        200:
+          description: "Update draft envelope."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/EnvelopeUpdate"
+    delete:
+      operationId: "deleteEnvelope"
+      tags:
+        - "Envelopes"
+      summary: "Delete draft envelope"
+      description: "Required scope: envelopes:write. Deletion is allowed only for drafts; terminal evidence remains retained."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        204:
+          description: "Delete draft envelope."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+  "/v1/envelopes/{envelope_id}/documents":
+    get:
+      operationId: "listDocuments"
+      tags:
+        - "Documents"
+      summary: "List documents"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "List documents."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/DocumentList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+    post:
+      operationId: "createDocument"
+      tags:
+        - "Documents"
+      summary: "Add draft document"
+      description: "Required scope: envelopes:write. Draft only. References must belong to this envelope. HTML fields are extracted as suggestions and require explicit recipient-assigned field creation."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        201:
+          description: "Add draft document."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Document"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              $ref: "#/components/schemas/DocumentUpload"
+  "/v1/envelopes/{envelope_id}/documents/{document_id}":
+    get:
+      operationId: "getDocument"
+      tags:
+        - "Documents"
+      summary: "Read document"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "Read document."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Document"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/document_id"
+    delete:
+      operationId: "deleteDocument"
+      tags:
+        - "Documents"
+      summary: "Remove draft document"
+      description: "Required scope: envelopes:write. Draft only. Document deletion removes fields; recipient deletion conflicts when assigned fields remain."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        204:
+          description: "Remove draft document."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/document_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+  "/v1/envelopes/{envelope_id}/recipients":
+    get:
+      operationId: "listRecipients"
+      tags:
+        - "Recipients"
+      summary: "List recipients"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "List recipients."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RecipientList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+    post:
+      operationId: "createRecipient"
+      tags:
+        - "Recipients"
+      summary: "Add draft recipient"
+      description: "Required scope: envelopes:write. Draft only; validate all references under this envelope."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        201:
+          description: "Add draft recipient."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Recipient"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/RecipientCreate"
+  "/v1/envelopes/{envelope_id}/recipients/{recipient_id}":
+    get:
+      operationId: "getRecipient"
+      tags:
+        - "Recipients"
+      summary: "Read recipient"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "Read recipient."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Recipient"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/recipient_id"
+    patch:
+      operationId: "updateRecipient"
+      tags:
+        - "Recipients"
+      summary: "Update draft recipient"
+      description: "Required scope: envelopes:write."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        200:
+          description: "Update draft recipient."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Recipient"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/recipient_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/RecipientUpdate"
+    delete:
+      operationId: "deleteRecipient"
+      tags:
+        - "Recipients"
+      summary: "Remove draft recipient"
+      description: "Required scope: envelopes:write. Draft only. Document deletion removes fields; recipient deletion conflicts when assigned fields remain."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        204:
+          description: "Remove draft recipient."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/recipient_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+  "/v1/envelopes/{envelope_id}/fields":
+    get:
+      operationId: "listFields"
+      tags:
+        - "Fields"
+      summary: "List fields"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "List fields."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/FieldList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+    post:
+      operationId: "createField"
+      tags:
+        - "Fields"
+      summary: "Add draft field"
+      description: "Required scope: envelopes:write. Draft only; validate all references under this envelope."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        201:
+          description: "Add draft field."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Field"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/FieldCreate"
+  "/v1/envelopes/{envelope_id}/fields/{field_id}":
+    get:
+      operationId: "getField"
+      tags:
+        - "Fields"
+      summary: "Read field"
+      description: "Required scope: envelopes:read."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "Read field."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Field"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/field_id"
+    patch:
+      operationId: "updateField"
+      tags:
+        - "Fields"
+      summary: "Update draft field"
+      description: "Required scope: envelopes:write."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        200:
+          description: "Update draft field."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Field"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/field_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/FieldUpdate"
+    delete:
+      operationId: "deleteField"
+      tags:
+        - "Fields"
+      summary: "Remove draft field"
+      description: "Required scope: envelopes:write. Draft only. Document deletion removes fields; recipient deletion conflicts when assigned fields remain."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        204:
+          description: "Remove draft field."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/field_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+  "/v1/envelopes/{envelope_id}/send":
+    post:
+      operationId: "sendEnvelope"
+      tags:
+        - "Envelopes"
+      summary: "Send envelope"
+      description: "Required scope: envelopes:write. Only draft may transition to sent. Freeze validated revision and enqueue notifications atomically. Repeated non-idempotent send returns 409."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        200:
+          description: "Send envelope."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/SendRequest"
+  "/v1/envelopes/{envelope_id}/void":
+    post:
+      operationId: "voidEnvelope"
+      tags:
+        - "Envelopes"
+      summary: "Void envelope"
+      description: "Required scope: envelopes:write. Allowed in draft or sent only. Invalidate every outstanding capability."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        200:
+          description: "Void envelope."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/VoidRequest"
+  "/v1/envelopes/{envelope_id}/signing-urls":
+    post:
+      operationId: "createSigningUrl"
+      tags:
+        - "Signing"
+      summary: "Create embedded signing URL"
+      description: "Required scope: envelopes:write. Only active signer/approver in a sent envelope. Single-use TTL defaults to 300s, maximum 900s, bounded by envelope expiry. API keys stay on the integrator backend."
+      x-required-scopes:
+        - "envelopes:write"
+      responses:
+        201:
+          description: "Create embedded signing URL."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SigningUrl"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/SigningUrlRequest"
+  "/v1/envelopes/{envelope_id}/final.pdf":
+    get:
+      operationId: "downloadFinalPdf"
+      tags:
+        - "Evidence"
+      summary: "Download final PDF"
+      description: "Required scope: envelopes:read. Available only after completed finalization; otherwise 409. Frozen bytes are never regenerated. Final PDF includes an audit certificate page; standalone certificate also records final-file SHA-256."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "Download final PDF."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+            Content-Disposition:
+              description: "Attachment with safe filename."
+              schema:
+                type: "string"
+            Cache-Control:
+              description: "private, no-store"
+              schema:
+                type: "string"
+            X-Content-SHA256:
+              description: "SHA-256 of exact response file bytes."
+              schema:
+                type: "string"
+                pattern: "^[a-f0-9]{64}$"
+          content:
+            "application/pdf":
+              schema:
+                type: "string"
+                format: "binary"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+  "/v1/envelopes/{envelope_id}/audit-certificate.pdf":
+    get:
+      operationId: "downloadAuditCertificate"
+      tags:
+        - "Evidence"
+      summary: "Download audit certificate"
+      description: "Required scope: envelopes:read. Available only after completed finalization; otherwise 409. Frozen bytes are never regenerated. Final PDF includes an audit certificate page; standalone certificate also records final-file SHA-256."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "Download audit certificate."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+            Content-Disposition:
+              description: "Attachment with safe filename."
+              schema:
+                type: "string"
+            Cache-Control:
+              description: "private, no-store"
+              schema:
+                type: "string"
+            X-Content-SHA256:
+              description: "SHA-256 of exact response file bytes."
+              schema:
+                type: "string"
+                pattern: "^[a-f0-9]{64}$"
+          content:
+            "application/pdf":
+              schema:
+                type: "string"
+                format: "binary"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+  "/v1/envelopes/{envelope_id}/events":
+    get:
+      operationId: "listEnvelopeEvents"
+      tags:
+        - "Evidence"
+      summary: "List envelope events"
+      description: "Required scope: envelopes:read. Append-only event ledger ordered by sequence; migration genesis is explicitly legacy."
+      x-required-scopes:
+        - "envelopes:read"
+      responses:
+        200:
+          description: "List envelope events."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/EventList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/envelope_id"
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+  "/v1/webhook-endpoints":
+    get:
+      operationId: "listWebhookEndpoints"
+      tags:
+        - "Webhooks"
+      summary: "List webhook endpoints"
+      description: "Required scope: webhooks:manage."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        200:
+          description: "List webhook endpoints."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookEndpointList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+    post:
+      operationId: "createWebhookEndpoint"
+      tags:
+        - "Webhooks"
+      summary: "Create webhook endpoint"
+      description: "Required scope: webhooks:manage. Signing secret returned once; mode derives from caller. HTTPS SSRF validation is mandatory."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        201:
+          description: "Create webhook endpoint."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookEndpointCreated"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/WebhookEndpointCreate"
+  "/v1/webhook-endpoints/{endpoint_id}":
+    get:
+      operationId: "getWebhookEndpoint"
+      tags:
+        - "Webhooks"
+      summary: "Read webhook endpoint"
+      description: "Required scope: webhooks:manage."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        200:
+          description: "Read webhook endpoint."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/endpoint_id"
+    patch:
+      operationId: "updateWebhookEndpoint"
+      tags:
+        - "Webhooks"
+      summary: "Update webhook endpoint"
+      description: "Required scope: webhooks:manage."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        200:
+          description: "Update webhook endpoint."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/endpoint_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/WebhookEndpointUpdate"
+    delete:
+      operationId: "deleteWebhookEndpoint"
+      tags:
+        - "Webhooks"
+      summary: "Delete webhook endpoint"
+      description: "Required scope: webhooks:manage. Cancel pending deliveries; retain historical delivery metadata. Recreate to rotate secret."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        204:
+          description: "Delete webhook endpoint."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/endpoint_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+  "/v1/webhook-deliveries":
+    get:
+      operationId: "listWebhookDeliveries"
+      tags:
+        - "Webhooks"
+      summary: "List webhook deliveries"
+      description: "Required scope: webhooks:manage."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        200:
+          description: "List webhook deliveries."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookDeliveryList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+        -
+          name: "endpoint_id"
+          in: "query"
+          required: false
+          description: "Filter by endpoint ID; repeat on subsequent pages."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+  "/v1/webhook-deliveries/{delivery_id}":
+    get:
+      operationId: "getWebhookDelivery"
+      tags:
+        - "Webhooks"
+      summary: "Read webhook delivery and attempts"
+      description: "Required scope: webhooks:manage."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        200:
+          description: "Read webhook delivery and attempts."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/delivery_id"
+  "/v1/webhook-deliveries/{delivery_id}/redeliver":
+    post:
+      operationId: "redeliverWebhook"
+      tags:
+        - "Webhooks"
+      summary: "Queue webhook redelivery"
+      description: "Required scope: webhooks:manage. New delivery ID, same event and exact persisted payload; enabled endpoint required. Fresh timestamp/signature per attempt."
+      x-required-scopes:
+        - "webhooks:manage"
+      responses:
+        202:
+          description: "Queue webhook redelivery."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/delivery_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+  "/v1/api-keys":
+    get:
+      operationId: "listApiKeys"
+      tags:
+        - "ApiKeys"
+      summary: "List API key metadata"
+      description: "Required scope: api_keys:manage. Includes revoked keys within current mode; never exposes hashes or secrets."
+      x-required-scopes:
+        - "api_keys:manage"
+      responses:
+        200:
+          description: "List API key metadata."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ApiKeyList"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/Limit"
+        -
+          $ref: "#/components/parameters/StartingAfter"
+    post:
+      operationId: "createApiKey"
+      tags:
+        - "ApiKeys"
+      summary: "Create scoped API key"
+      description: "Required scope: api_keys:manage. Only grant scopes held by caller in its mode. First admin key is provisioned via admin UI/CLI. Secret is stored only hashed; duplicate idempotency key returns 409 with existing resource_id, never a cached secret."
+      x-required-scopes:
+        - "api_keys:manage"
+      responses:
+        201:
+          description: "Create scoped API key."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreated"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        413:
+          $ref: "#/components/responses/Problem413"
+        415:
+          $ref: "#/components/responses/Problem415"
+        422:
+          $ref: "#/components/responses/Problem422"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ApiKeyCreate"
+  "/v1/api-keys/{key_id}":
+    get:
+      operationId: "getApiKey"
+      tags:
+        - "ApiKeys"
+      summary: "Read API key metadata"
+      description: "Required scope: api_keys:manage."
+      x-required-scopes:
+        - "api_keys:manage"
+      responses:
+        200:
+          description: "Read API key metadata."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ApiKey"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/key_id"
+    delete:
+      operationId: "revokeApiKey"
+      tags:
+        - "ApiKeys"
+      summary: "Revoke API key"
+      description: "Required scope: api_keys:manage. Immediate revocation; retain metadata. Repeat revocation returns 204 while caller remains authorized."
+      x-required-scopes:
+        - "api_keys:manage"
+      responses:
+        204:
+          description: "Revoke API key."
+          headers:
+            X-Request-Id:
+              description: "Correlation ID; contains no secrets."
+              schema:
+                type: "string"
+                minLength: 1
+                maxLength: 128
+            RateLimit-Limit:
+              description: "Applicable request quota."
+              schema:
+                type: "integer"
+            RateLimit-Remaining:
+              description: "Requests remaining."
+              schema:
+                type: "integer"
+            RateLimit-Reset:
+              description: "Seconds until quota resets."
+              schema:
+                type: "integer"
+            Idempotency-Replayed:
+              description: "true if a stored mutation response was replayed."
+              schema:
+                type: "boolean"
+        400:
+          $ref: "#/components/responses/Problem400"
+        401:
+          $ref: "#/components/responses/Problem401"
+        403:
+          $ref: "#/components/responses/Problem403"
+        404:
+          $ref: "#/components/responses/Problem404"
+        409:
+          $ref: "#/components/responses/Problem409"
+        429:
+          $ref: "#/components/responses/Problem429"
+        500:
+          $ref: "#/components/responses/Problem500"
+        503:
+          $ref: "#/components/responses/Problem503"
+      parameters:
+        -
+          $ref: "#/components/parameters/key_id"
+        -
+          $ref: "#/components/parameters/IdempotencyKey"
+webhooks:
+  envelopeEvent:
+    post:
+      operationId: "receiveEnvelopeEvent"
+      tags:
+        - "Webhooks"
+      summary: "Receive an envelope or recipient event"
+      description: "Outbound at-least-once HTTPS delivery. Verify HMAC-SHA256 hex over timestamp + dot + exact raw body, compare constant-time, reject timestamp outside ±300 seconds and deduplicate event ID. No ordering guarantee. Initial attempt plus seven exponential retries with jitter (30s, 2m, 10m, 30m, 2h, 8h, 24h); 10s timeout. All non-2xx/network failures retry; 410 disables endpoint. Manual redelivery retains event ID and payload with a fresh delivery ID."
+      security: []
+      parameters:
+        -
+          name: "Puumerkki-Signature"
+          in: "header"
+          required: true
+          description: "HMAC with endpoint secret: t=unix seconds,v1=lowercase hex signature. Required authentication; not a bearer API key."
+          schema:
+            type: "string"
+            pattern: "^t=[0-9]+,v1=[a-f0-9]{64}$"
+        -
+          name: "Puumerkki-Event-Id"
+          in: "header"
+          required: true
+          description: "Stable event ID for deduplication."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+        -
+          name: "Puumerkki-Delivery-Id"
+          in: "header"
+          required: true
+          description: "Delivery ID; retries share this ID, manual redelivery creates a new ID."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/WebhookPayload"
+      responses:
+        200:
+          description: "Receiver durably accepted event."
+        400:
+          description: "Receiver rejected malformed payload; retried."
+        401:
+          description: "Receiver rejected invalid signature/timestamp; retried."
+        410:
+          description: "Receiver permanently unavailable; endpoint disabled."
+        429:
+          description: "Receiver rate limited; bounded Retry-After respected."
+          headers:
+            Retry-After:
+              description: "Retry delay in seconds."
+              schema:
+                type: "integer"
+                minimum: 1
+        500:
+          description: "Receiver failed; retried."
+components:
+  securitySchemes:
+    bearerApiKey:
+      type: "http"
+      scheme: "bearer"
+      bearerFormat: "pk_live_<id>.<secret> or pk_test_<id>.<secret>"
+      description: "Workspace-scoped API key. Persistent secret is SHA-256/Argon2id hashed; visible prefix contains ID. Required scopes are documented on operations. Test keys isolate test data and suppress real email."
+  schemas:
+    Workspace:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        name:
+          type: "string"
+        created_at:
+          type: "string"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "name"
+        - "created_at"
+        - "updated_at"
+    EnvelopeCreate:
+      type: "object"
+      properties:
+        title:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        metadata:
+          type: "object"
+          additionalProperties:
+            type: "string"
+            maxLength: 1000
+          maxProperties: 20
+        routing:
+          type: "string"
+          enum:
+            - "parallel"
+            - "sequential"
+          default: "parallel"
+        expires_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "title"
+    EnvelopeUpdate:
+      type: "object"
+      properties:
+        title:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        metadata:
+          type: "object"
+          additionalProperties:
+            type: "string"
+            maxLength: 1000
+          maxProperties: 20
+        routing:
+          type: "string"
+          enum:
+            - "parallel"
+            - "sequential"
+          default: "parallel"
+        expires_at:
+          type: "string"
+          format: "date-time"
+      description: "Only drafts may be changed. Provided attributes replace their existing values; metadata is replaced as a whole."
+    Envelope:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        workspace_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        mode:
+          type: "string"
+          enum:
+            - "live"
+            - "test"
+        title:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        metadata:
+          type: "object"
+          additionalProperties:
+            type: "string"
+            maxLength: 1000
+          maxProperties: 20
+        routing:
+          type: "string"
+          enum:
+            - "parallel"
+            - "sequential"
+          default: "parallel"
+        expires_at:
+          type: "string"
+          format: "date-time"
+        status:
+          type: "string"
+          enum:
+            - "draft"
+            - "sent"
+            - "completed"
+            - "declined"
+            - "voided"
+            - "expired"
+        created_at:
+          type: "string"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          format: "date-time"
+        sent_at:
+          type: "string"
+          format: "date-time"
+        completed_at:
+          type: "string"
+          format: "date-time"
+        void_reason:
+          type: "string"
+        final_file_sha256:
+          type: "string"
+          pattern: "^[a-f0-9]{64}$"
+        audit_certificate_sha256:
+          type: "string"
+          pattern: "^[a-f0-9]{64}$"
+        evidence_version:
+          type: "string"
+          enum:
+            - "v1"
+            - "legacy"
+      required:
+        - "id"
+        - "workspace_id"
+        - "mode"
+        - "title"
+        - "routing"
+        - "status"
+        - "created_at"
+        - "updated_at"
+        - "expires_at"
+        - "evidence_version"
+    Document:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        envelope_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        kind:
+          type: "string"
+          enum:
+            - "pdf"
+            - "html"
+        name:
+          type: "string"
+        position:
+          type: "integer"
+          minimum: 0
+        content_sha256:
+          type: "string"
+          pattern: "^[a-f0-9]{64}$"
+        created_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "envelope_id"
+        - "kind"
+        - "name"
+        - "position"
+        - "content_sha256"
+        - "created_at"
+    DocumentUpload:
+      type: "object"
+      properties:
+        file:
+          type: "string"
+          format: "binary"
+          description: "PDF max 4 MiB or UTF-8 HTML max 2 MiB. MIME and actual content are validated."
+        kind:
+          type: "string"
+          enum:
+            - "pdf"
+            - "html"
+        name:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        position:
+          type: "integer"
+          minimum: 0
+          description: "Unique document position within the envelope."
+      required:
+        - "file"
+        - "kind"
+        - "name"
+        - "position"
+    RecipientCreate:
+      type: "object"
+      properties:
+        email:
+          type: "string"
+          format: "email"
+        name:
+          type: "string"
+          maxLength: 200
+        role:
+          type: "string"
+          enum:
+            - "signer"
+            - "approver"
+            - "cc"
+        routing_order:
+          type: "integer"
+          minimum: 1
+          default: 1
+      required:
+        - "email"
+        - "role"
+    RecipientUpdate:
+      type: "object"
+      properties:
+        email:
+          type: "string"
+          format: "email"
+        name:
+          type: "string"
+          maxLength: 200
+        role:
+          type: "string"
+          enum:
+            - "signer"
+            - "approver"
+            - "cc"
+        routing_order:
+          type: "integer"
+          minimum: 1
+          default: 1
+      description: "Draft-only partial update. CC and approver cannot own signature fields."
+    Recipient:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        envelope_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        email:
+          type: "string"
+          format: "email"
+        name:
+          type: "string"
+          maxLength: 200
+        role:
+          type: "string"
+          enum:
+            - "signer"
+            - "approver"
+            - "cc"
+        routing_order:
+          type: "integer"
+          minimum: 1
+          default: 1
+        status:
+          type: "string"
+          enum:
+            - "pending"
+            - "active"
+            - "signed"
+            - "approved"
+            - "declined"
+            - "notified"
+        created_at:
+          type: "string"
+          format: "date-time"
+        acted_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "envelope_id"
+        - "email"
+        - "role"
+        - "routing_order"
+        - "status"
+        - "created_at"
+    PdfLocation:
+      type: "object"
+      properties:
+        page:
+          type: "integer"
+          minimum: 0
+        x:
+          type: "number"
+          minimum: 0
+        y:
+          type: "number"
+          minimum: 0
+        width:
+          type: "number"
+          exclusiveMinimum: 0
+        height:
+          type: "number"
+          exclusiveMinimum: 0
+      required:
+        - "page"
+        - "x"
+        - "y"
+        - "width"
+        - "height"
+      description: "Zero-based page and top-left PDF points after rotation; rectangle must fit the page."
+    FieldCreate:
+      type: "object"
+      properties:
+        document_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        recipient_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        type:
+          type: "string"
+          enum:
+            - "text"
+            - "textarea"
+            - "checkbox"
+            - "signature"
+            - "date"
+        name:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        label:
+          type: "string"
+          maxLength: 200
+        required:
+          type: "boolean"
+          default: true
+        prefilled:
+          type: "boolean"
+          default: false
+        value:
+          type:
+            - "string"
+            - "boolean"
+            - "null"
+          description: "Text/textarea string (max 5000 characters), checkbox boolean, date YYYY-MM-DD, signature validated PNG data URL (max 512 KiB decoded), or null to clear. Type-dependent validation is mandatory."
+        location:
+          $ref: "#/components/schemas/PdfLocation"
+      required:
+        - "document_id"
+        - "recipient_id"
+        - "type"
+        - "name"
+      description: "PDF requires location; HTML forbids location and requires a matching unique data-pm-field name. CC cannot own fields; signature prefill is forbidden."
+    FieldUpdate:
+      type: "object"
+      properties:
+        document_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        recipient_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        type:
+          type: "string"
+          enum:
+            - "text"
+            - "textarea"
+            - "checkbox"
+            - "signature"
+            - "date"
+        name:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        label:
+          type: "string"
+          maxLength: 200
+        required:
+          type: "boolean"
+          default: true
+        prefilled:
+          type: "boolean"
+          default: false
+        value:
+          type:
+            - "string"
+            - "boolean"
+            - "null"
+          description: "Text/textarea string (max 5000 characters), checkbox boolean, date YYYY-MM-DD, signature validated PNG data URL (max 512 KiB decoded), or null to clear. Type-dependent validation is mandatory."
+        location:
+          $ref: "#/components/schemas/PdfLocation"
+      description: "Draft-only partial update, including value/prefilled. Type, recipient role and source-specific location rules remain enforced."
+    Field:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        envelope_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        document_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        recipient_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        type:
+          type: "string"
+          enum:
+            - "text"
+            - "textarea"
+            - "checkbox"
+            - "signature"
+            - "date"
+        name:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        label:
+          type: "string"
+          maxLength: 200
+        required:
+          type: "boolean"
+          default: true
+        prefilled:
+          type: "boolean"
+          default: false
+        value:
+          type:
+            - "string"
+            - "boolean"
+            - "null"
+          description: "Text/textarea string (max 5000 characters), checkbox boolean, date YYYY-MM-DD, signature validated PNG data URL (max 512 KiB decoded), or null to clear. Type-dependent validation is mandatory."
+        location:
+          $ref: "#/components/schemas/PdfLocation"
+        created_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "envelope_id"
+        - "document_id"
+        - "recipient_id"
+        - "type"
+        - "name"
+        - "required"
+        - "prefilled"
+        - "created_at"
+    SendRequest:
+      type: "object"
+      properties:
+        notification:
+          type: "string"
+          enum:
+            - "none"
+            - "email"
+          default: "none"
+      description: "Email with an unconfigured provider returns 422 before send commits; test mode suppresses real email."
+    VoidRequest:
+      type: "object"
+      properties:
+        reason:
+          type: "string"
+          minLength: 1
+          maxLength: 1000
+      required:
+        - "reason"
+    SigningUrlRequest:
+      type: "object"
+      properties:
+        recipient_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        return_url:
+          type: "string"
+          format: "uri"
+          description: "HTTPS URL on an approved return origin."
+        parent_origin:
+          type: "string"
+          format: "uri"
+          description: "Exact approved iframe origin, without path."
+        ttl_seconds:
+          type: "integer"
+          minimum: 1
+          maximum: 900
+          default: 300
+      required:
+        - "recipient_id"
+        - "return_url"
+        - "parent_origin"
+    SigningUrl:
+      type: "object"
+      properties:
+        url:
+          type: "string"
+          format: "uri"
+          description: "Secret single-use bootstrap URL; exchange to a recipient-scoped signing session."
+        expires_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "url"
+        - "expires_at"
+    Event:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        workspace_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        envelope_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        sequence:
+          type: "integer"
+          minimum: 1
+        type:
+          type: "string"
+          description: "Lifecycle event type; envelope.imported is reserved for legacy migration."
+        occurred_at:
+          type: "string"
+          format: "date-time"
+        actor:
+          type: "object"
+          properties:
+            kind:
+              type: "string"
+              enum:
+                - "api_key"
+                - "recipient"
+                - "system"
+            id:
+              type: "string"
+              minLength: 1
+              maxLength: 128
+          required:
+            - "kind"
+        data:
+          type: "object"
+          additionalProperties: true
+        prev_hash:
+          type: "string"
+          pattern: "^[a-f0-9]{64}$"
+        hash:
+          type: "string"
+          pattern: "^[a-f0-9]{64}$"
+        evidence_version:
+          type: "string"
+          enum:
+            - "v1"
+            - "legacy"
+      required:
+        - "id"
+        - "workspace_id"
+        - "envelope_id"
+        - "sequence"
+        - "type"
+        - "occurred_at"
+        - "actor"
+        - "data"
+        - "prev_hash"
+        - "hash"
+        - "evidence_version"
+      description: "hash is SHA-256 of RFC 8785 canonical UTF-8 JSON of this object excluding only hash; genesis prev_hash is 64 zeroes."
+    WebhookEndpointCreate:
+      type: "object"
+      properties:
+        url:
+          type: "string"
+          format: "uri"
+          description: "Validated HTTPS destination; redirects and private networks are blocked unless operator allowlisted."
+        event_types:
+          type: "array"
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: "string"
+            enum:
+              - "envelope.created"
+              - "envelope.sent"
+              - "recipient.viewed"
+              - "recipient.signed"
+              - "recipient.approved"
+              - "recipient.declined"
+              - "envelope.completed"
+              - "envelope.declined"
+              - "envelope.voided"
+              - "envelope.expired"
+        enabled:
+          type: "boolean"
+          default: true
+      required:
+        - "url"
+        - "event_types"
+    WebhookEndpointUpdate:
+      type: "object"
+      properties:
+        url:
+          type: "string"
+          format: "uri"
+          description: "Validated HTTPS destination; redirects and private networks are blocked unless operator allowlisted."
+        event_types:
+          type: "array"
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: "string"
+            enum:
+              - "envelope.created"
+              - "envelope.sent"
+              - "recipient.viewed"
+              - "recipient.signed"
+              - "recipient.approved"
+              - "recipient.declined"
+              - "envelope.completed"
+              - "envelope.declined"
+              - "envelope.voided"
+              - "envelope.expired"
+        enabled:
+          type: "boolean"
+          default: true
+      description: "Partial update. Use replacement endpoint for signing-secret rotation."
+    WebhookEndpoint:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        workspace_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        mode:
+          type: "string"
+          enum:
+            - "live"
+            - "test"
+        url:
+          type: "string"
+          format: "uri"
+          description: "Validated HTTPS destination; redirects and private networks are blocked unless operator allowlisted."
+        event_types:
+          type: "array"
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: "string"
+            enum:
+              - "envelope.created"
+              - "envelope.sent"
+              - "recipient.viewed"
+              - "recipient.signed"
+              - "recipient.approved"
+              - "recipient.declined"
+              - "envelope.completed"
+              - "envelope.declined"
+              - "envelope.voided"
+              - "envelope.expired"
+        enabled:
+          type: "boolean"
+          default: true
+        created_at:
+          type: "string"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "workspace_id"
+        - "mode"
+        - "url"
+        - "event_types"
+        - "enabled"
+        - "created_at"
+        - "updated_at"
+    WebhookEndpointCreated:
+      allOf:
+        -
+          $ref: "#/components/schemas/WebhookEndpoint"
+        -
+          type: "object"
+          properties:
+            signing_secret:
+              type: "string"
+              description: "Returned only at creation. Store securely; encrypted transient idempotency replay is allowed for 24 hours."
+          required:
+            - "signing_secret"
+    WebhookPayload:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        type:
+          type: "string"
+          enum:
+            - "envelope.created"
+            - "envelope.sent"
+            - "recipient.viewed"
+            - "recipient.signed"
+            - "recipient.approved"
+            - "recipient.declined"
+            - "envelope.completed"
+            - "envelope.declined"
+            - "envelope.voided"
+            - "envelope.expired"
+        occurred_at:
+          type: "string"
+          format: "date-time"
+        workspace_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        mode:
+          type: "string"
+          enum:
+            - "live"
+            - "test"
+        envelope_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        data:
+          type: "object"
+          properties:
+            recipient_id:
+              type: "string"
+              minLength: 1
+              maxLength: 128
+            final_file_sha256:
+              type: "string"
+              pattern: "^[a-f0-9]{64}$"
+            audit_certificate_sha256:
+              type: "string"
+              pattern: "^[a-f0-9]{64}$"
+          description: "Minimal event-specific data. No tokens, values, signatures or raw IPs."
+      required:
+        - "id"
+        - "type"
+        - "occurred_at"
+        - "workspace_id"
+        - "mode"
+        - "envelope_id"
+        - "data"
+    DeliveryAttempt:
+      type: "object"
+      properties:
+        attempt:
+          type: "integer"
+          minimum: 1
+        started_at:
+          type: "string"
+          format: "date-time"
+        http_status:
+          type: "integer"
+          minimum: 100
+          maximum: 599
+        error:
+          type: "string"
+          maxLength: 4096
+        next_attempt_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "attempt"
+        - "started_at"
+    WebhookDelivery:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        endpoint_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        event_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        original_delivery_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        status:
+          type: "string"
+          enum:
+            - "pending"
+            - "delivering"
+            - "succeeded"
+            - "failed"
+            - "cancelled"
+        attempt_count:
+          type: "integer"
+          minimum: 0
+        created_at:
+          type: "string"
+          format: "date-time"
+        next_attempt_at:
+          type: "string"
+          format: "date-time"
+        payload:
+          $ref: "#/components/schemas/WebhookPayload"
+        attempts:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/DeliveryAttempt"
+      required:
+        - "id"
+        - "endpoint_id"
+        - "event_id"
+        - "status"
+        - "attempt_count"
+        - "created_at"
+        - "payload"
+        - "attempts"
+    ApiKeyCreate:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+          minLength: 1
+          maxLength: 100
+        mode:
+          type: "string"
+          enum:
+            - "live"
+            - "test"
+        scopes:
+          type: "array"
+          uniqueItems: true
+          minItems: 1
+          items:
+            type: "string"
+            enum:
+              - "envelopes:read"
+              - "envelopes:write"
+              - "webhooks:manage"
+              - "api_keys:manage"
+        expires_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "name"
+        - "mode"
+        - "scopes"
+      description: "Administrator or api_keys:manage required. Granted scopes must be a subset of the caller scopes; mode must match caller mode."
+    ApiKey:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        workspace_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        name:
+          type: "string"
+        mode:
+          type: "string"
+          enum:
+            - "live"
+            - "test"
+        prefix:
+          type: "string"
+          pattern: "^pk_(live|test)_[^.]+$"
+        scopes:
+          type: "array"
+          uniqueItems: true
+          minItems: 1
+          items:
+            type: "string"
+            enum:
+              - "envelopes:read"
+              - "envelopes:write"
+              - "webhooks:manage"
+              - "api_keys:manage"
+        created_at:
+          type: "string"
+          format: "date-time"
+        expires_at:
+          type: "string"
+          format: "date-time"
+        revoked_at:
+          type: "string"
+          format: "date-time"
+        last_used_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "workspace_id"
+        - "name"
+        - "mode"
+        - "prefix"
+        - "scopes"
+        - "created_at"
+    ApiKeyCreated:
+      allOf:
+        -
+          $ref: "#/components/schemas/ApiKey"
+        -
+          type: "object"
+          properties:
+            key:
+              type: "string"
+              pattern: "^pk_(live|test)_[^.]+\\.[A-Za-z0-9_-]+$"
+              description: "Full key returned once and never cached. Secret storage is hash-only. A duplicate creation request returns 409 one-time-result-unavailable with key ID instead of replaying the secret."
+          required:
+            - "key"
+    Problem:
+      type: "object"
+      properties:
+        type:
+          type: "string"
+          format: "uri"
+          description: "Stable absolute deployment-specific problem type URI."
+        title:
+          type: "string"
+        status:
+          type: "integer"
+          minimum: 400
+          maximum: 599
+        detail:
+          type: "string"
+        instance:
+          type: "string"
+          format: "uri-reference"
+        code:
+          type: "string"
+        request_id:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+        resource_id:
+          type: "string"
+          description: "Existing key ID for one-time-result-unavailable; no secret."
+        errors:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              pointer:
+                type: "string"
+                description: "JSON Pointer to invalid input."
+              message:
+                type: "string"
+            required:
+              - "pointer"
+              - "message"
+      required:
+        - "type"
+        - "title"
+        - "status"
+        - "detail"
+        - "instance"
+        - "code"
+        - "request_id"
+      description: "RFC 9457 (supersedes RFC 7807). No SQL, stack traces or secrets."
+    EnvelopeList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Envelope"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    DocumentList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Document"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    RecipientList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Recipient"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    FieldList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Field"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    EventList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/Event"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    WebhookEndpointList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/WebhookEndpoint"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    WebhookDeliveryList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/WebhookDelivery"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+    ApiKeyList:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ApiKey"
+        has_more:
+          type: "boolean"
+      required:
+        - "data"
+        - "has_more"
+  parameters:
+    Limit:
+      name: "limit"
+      in: "query"
+      required: false
+      description: "Maximum returned items."
+      schema:
+        type: "integer"
+        minimum: 1
+        maximum: 100
+        default: 20
+    StartingAfter:
+      name: "starting_after"
+      in: "query"
+      required: false
+      description: "Last resource ID from the preceding page; must match workspace, mode, parent and filters."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    IdempotencyKey:
+      name: "Idempotency-Key"
+      in: "header"
+      required: false
+      description: "Optional on all mutations. Workspace/mode/key-scoped 24-hour replay; differing request or in-flight request returns 409. API-key creation is an exception: duplicate returns 409 one-time-result-unavailable with existing key ID, never a second secret. Replays retain original expiry for secret URLs."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 255
+        pattern: "^[ -~]+$"
+    envelope_id:
+      name: "envelope_id"
+      in: "path"
+      required: true
+      description: "Opaque envelope id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    document_id:
+      name: "document_id"
+      in: "path"
+      required: true
+      description: "Opaque document id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    recipient_id:
+      name: "recipient_id"
+      in: "path"
+      required: true
+      description: "Opaque recipient id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    field_id:
+      name: "field_id"
+      in: "path"
+      required: true
+      description: "Opaque field id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    endpoint_id:
+      name: "endpoint_id"
+      in: "path"
+      required: true
+      description: "Opaque endpoint id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    delivery_id:
+      name: "delivery_id"
+      in: "path"
+      required: true
+      description: "Opaque delivery id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+    key_id:
+      name: "key_id"
+      in: "path"
+      required: true
+      description: "Opaque key id."
+      schema:
+        type: "string"
+        minLength: 1
+        maxLength: 128
+  responses:
+    Problem400:
+      description: "Invalid request or cursor."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem401:
+      description: "Missing, expired or revoked bearer key."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+        WWW-Authenticate:
+          description: "Bearer authentication challenge."
+          schema:
+            type: "string"
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem403:
+      description: "Insufficient scope."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem404:
+      description: "Resource not found in this workspace/mode/parent."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem409:
+      description: "Lifecycle conflict, artifact not ready, idempotency conflict/in-progress, or one-time-result-unavailable on duplicate key creation."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+        Retry-After:
+          description: "Seconds before retry, if retryable."
+          schema:
+            type: "integer"
+            minimum: 1
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem413:
+      description: "Streamed body exceeds the byte limit."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem415:
+      description: "Unsupported content type."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem422:
+      description: "Semantic validation failed."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem429:
+      description: "Request quota exceeded."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+        Retry-After:
+          description: "Seconds before retry, if retryable."
+          schema:
+            type: "integer"
+            minimum: 1
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem500:
+      description: "Unexpected server failure."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Problem503:
+      description: "Temporarily unavailable."
+      headers:
+        X-Request-Id:
+          description: "Correlation ID; contains no secrets."
+          schema:
+            type: "string"
+            minLength: 1
+            maxLength: 128
+        Retry-After:
+          description: "Seconds before retry, if retryable."
+          schema:
+            type: "integer"
+            minimum: 1
+      content:
+        "application/problem+json":
+          schema:
+            $ref: "#/components/schemas/Problem"

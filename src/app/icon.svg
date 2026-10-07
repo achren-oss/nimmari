@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="paper" cx="32%" cy="28%" r="80%">
+      <stop offset="0%" stop-color="#fbf6e6"/>
+      <stop offset="100%" stop-color="#f0e4c4"/>
+    </radialGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3"/>
+      <feColorMatrix values="0 0 0 0 0.18  0 0 0 0 0.16  0 0 0 0 0.10  0 0 0 0.06 0"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+
+  <!-- Parchment background -->
+  <rect width="64" height="64" rx="12" ry="12" fill="url(#paper)"/>
+  <rect width="64" height="64" rx="12" ry="12" filter="url(#grain)" fill="url(#paper)"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="11.5" ry="11.5"
+        fill="none" stroke="#5a4a31" stroke-width="1" opacity="0.35"/>
+
+  <!-- Italic serif P (Newsreader-feel) -->
+  <text x="11" y="50"
+        font-family="Newsreader, 'Hoefler Text', Georgia, serif"
+        font-style="italic"
+        font-weight="400"
+        font-size="56"
+        letter-spacing="-0.02em"
+        fill="#1d2839">P</text>
+
+  <!-- Wax-red period (the brand signature) -->
+  <circle cx="48" cy="46" r="5"
+          fill="#8a3a26"
+          stroke="#5d1f10"
+          stroke-width="0.5"/>
+  <!-- Tiny inner highlight for the wax look -->
+  <circle cx="46" cy="44" r="1.4" fill="rgba(255,255,255,0.35)"/>
+</svg>

@@ -1,0 +1,46 @@
+{
+  "name": "puumerkki",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:push": "drizzle-kit push --force",
+    "db:studio": "drizzle-kit studio",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.3",
+    "@sparticuz/chromium-min": "^153.0.0",
+    "@types/sanitize-html": "^2.16.1",
+    "better-auth": "^1.7.6",
+    "cheerio": "^1.2.0",
+    "drizzle-orm": "^0.45.2",
+    "next": "16.3.6",
+    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^25.12.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-pdf": "^10.4.1",
+    "resend": "^6.12.2",
+    "sanitize-html": "^2.17.7",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^3.2.7"
+  },
+  "author": "Big Blue Games Oy",
+  "license": "AGPL-3.0-only",
+  "description": "Self-hosted headless e-signature app for PDF documents and HTML forms."
+}

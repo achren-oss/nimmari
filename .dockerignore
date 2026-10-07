@@ -1,0 +1,11 @@
+.git
+node_modules
+.next
+.env*
+!.env.example
+local.db*
+*.log
+docs
+openapi
+coverage
+tsconfig.tsbuildinfo

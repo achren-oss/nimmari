@@ -1,0 +1,36 @@
+# Render Blueprint for Puumerkki (Docker web service + external Turso database).
+# Docs: docs/deploy-render.md
+services:
+  - type: web
+    name: puumerkki
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Turso database URL, e.g. libsql://puumerkki-<org>.turso.io
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
+      # Random 32+ byte secret for session signing.
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      # Public HTTPS origin of this service, e.g. https://puumerkki.onrender.com
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      # Optional: service-account API access.
+      - key: PUUMERKKI_API_KEY
+        sync: false
+      - key: PUUMERKKI_API_OWNER_ID
+        sync: false
+      # Optional: email delivery via Resend (leave empty to share links manually).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false

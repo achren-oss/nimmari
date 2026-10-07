@@ -51,7 +51,14 @@ async function launchBrowser(): Promise<Browser> {
   const executablePath =
     process.env.PUPPETEER_EXECUTABLE_PATH ||
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  return puppeteer.launch({ executablePath, headless: true });
+  // Containers usually lack the kernel features for Chromium's sandbox.
+  // PUPPETEER_NO_SANDBOX=1 (set in the Docker image) disables it; rendered
+  // HTML is sanitized and network access is blocked during rendering.
+  const args =
+    process.env.PUPPETEER_NO_SANDBOX === "1"
+      ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+      : [];
+  return puppeteer.launch({ executablePath, headless: true, args });
 }
 
 export async function renderHtmlToPdf(html: string): Promise<Uint8Array> {

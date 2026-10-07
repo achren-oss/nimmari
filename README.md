@@ -65,9 +65,15 @@ The script prints `PUUMERKKI_API_OWNER_ID=...`, including when the email already
 
 ## Self-hosting
 
-Deploy to any compatible Node 20 host or your own Vercel project. For a Node server, run `npm run build` and `npm start`. Use persistent storage for a SQLite file, or use Turso/libSQL. Vercel requires a remote database because its filesystem is ephemeral. Documents and signed outputs are stored in the database; back it up and test restores.
+Puumerkki is self-host only. Pick one:
 
-Use HTTPS and configure both public origins for your deployment. Protect database credentials, signing links, and API keys. You are the data controller and are responsible for access control, retention, privacy notices, and operation of your deployment. Optional email and remote database providers are part of your chosen infrastructure.
+- **Render + Turso (recommended):** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
+- **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
+- **Any Docker host:** `docker build -t puumerkki .` then
+  `docker run -p 3000:3000 -v puumerkki-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host puumerkki`.
+  Without `DATABASE_URL` the image uses a SQLite file at `/data/puumerkki.db` (mount a volume). Migrations run on start; `/api/health` reports status.
+
+Documents and signed outputs are stored in the database; back it up and test restores. You are the data controller for your instance.
 
 ## Current API
 
@@ -75,6 +81,7 @@ Use HTTPS and configure both public origins for your deployment. Protect databas
 
 | Method | Endpoint | Auth | Purpose |
 | --- | --- | --- | --- |
+| GET | `/api/health` | None | Liveness and database check; `{"status":"ok"}` or 503 |
 | GET, POST | `/api/auth/[...all]` | Better Auth route-specific | Signup, login, logout, session and other Better Auth handlers |
 | POST | `/api/documents` | Owner | Upload multipart `pdf` and optional `title`; returns document ID (4 MB limit) |
 | POST | `/api/documents/html` | Owner | Upload multipart `html` file or string and optional `title`; extracts fields (2 MB limit) |
@@ -125,7 +132,7 @@ Puumerkki produces eIDAS Simple Electronic Signatures only, not Advanced or Qual
 These are planned ideas, not current capabilities:
 
 - Headless API v1: workspaces, API keys, an envelope/signer/field model, immutable event log, webhooks, OpenAPI, and a TypeScript SDK.
-- Docker image, docker-compose, and S3-compatible storage.
+- docker-compose for local use and S3-compatible storage.
 - v1.1: PAdES certificate-signed PDFs and RFC 3161 timestamps.
 - Optional “Sign in with AgentID” OIDC integration idea.
 

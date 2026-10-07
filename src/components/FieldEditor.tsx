@@ -104,6 +104,7 @@ export function FieldEditor({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- strip client-only id
         fields: fields.map(({ id: _id, ...rest }) => rest),
       }),
     });

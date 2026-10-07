@@ -27,6 +27,10 @@ free tiers, which are enough for personal use and evaluation.
   and 10 million rows written per month, 1-day point-in-time restore.
 - Signed PDFs are stored in the database, so storage is the limit that matters most.
 
+## Performance on the free tier
+
+Measured 7.10.2026 (Frankfurt, 0.1 CPU / 512 MB, Turso Ireland): signing an HTML document, including the Chromium PDF render, takes about 10 s (9.4–10.4 s). Upload, send and PDF fetch each take under 1.5 s. After about 15 minutes idle the service sleeps, and the first request took 27.6 s. The free plan is fine for evaluation. For regular use, pick the cheapest paid instance. Clients can pre-warm the service by calling `/api/health` when the UI opens. Details: [benchmarks/render-free-2026-10-07.md](benchmarks/render-free-2026-10-07.md).
+
 ## Steps
 
 1. **Create the database** (Turso CLI: <https://docs.turso.tech/cli/introduction>)

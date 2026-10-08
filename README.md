@@ -83,7 +83,7 @@ Documents and signed outputs are stored in the database; back it up and test res
 
 ## Current API
 
-“Owner” below means an authenticated browser session or `Authorization: Bearer <PUUMERKKI_API_KEY>`, with document ownership enforced. Field placement and prefill currently accept browser sessions only. An invalid bearer key is rejected on routes using service-account authentication.
+“Owner” below means an authenticated browser session or `Authorization: Bearer <PUUMERKKI_API_KEY>`, with document ownership enforced. Field placement accepts either; prefill currently accepts browser sessions only. An invalid bearer key is rejected on routes using service-account authentication.
 
 | Method | Endpoint | Auth | Purpose |
 | --- | --- | --- | --- |
@@ -92,14 +92,26 @@ Documents and signed outputs are stored in the database; back it up and test res
 | POST | `/api/documents` | Owner | Upload multipart `pdf` and optional `title`; returns document ID (4 MB limit) |
 | POST | `/api/documents/html` | Owner | Upload multipart `html` file or string and optional `title`; extracts fields (2 MB limit) |
 | GET | `/api/documents/[id]` | Owner | Read document metadata, fields, and signing sessions |
-| PUT | `/api/documents/[id]/fields` | Owner browser session | Replace draft PDF fields with JSON `{fields: [...]}` |
+| PUT | `/api/documents/[id]/fields` | Owner | Replace draft PDF fields with JSON `{fields: [...]}` |
 | PUT | `/api/documents/[id]/prefill` | Owner browser session | Set or clear draft field values with JSON `{values: {...}}` |
-| POST | `/api/documents/[id]/send` | Owner | Create a signing session; JSON `email`, optional `name` and `senderName`; returns `url`, `emailSent`, and optional `emailNote` |
+| POST | `/api/documents/[id]/send` | Owner | Create a signing session; JSON `email`, optional `name`, `senderName` and `notify` (default `true`); returns `url`, `signingSessionId`, `expiresAt`, `emailSent`, and optional `emailNote`. With `notify: false` no email is sent and you deliver `url` yourself |
 | GET | `/api/documents/[id]/pdf` | Owner or matching `?t=` signing token | Read original PDF, or signed PDF with `signed=1` |
 | GET | `/api/documents/[id]/html` | Owner or matching `?t=` signing token | Read HTML; `signed=1` for signed output, `print=1` for browser printing |
 | POST | `/api/sign/[token]` | Unexpired signing token | Submit JSON `values` and optional `signaturePng` data URL; complete signing |
 | GET | `/api/sign/[token]/pdf` | Unexpired signing token | Download completed signed PDF |
 | POST | `/api/webhooks/resend` | Verified Svix-style signature | Record Resend signing-link click events |
+
+Link-only delivery, for example a bot that returns the signing link in a chat instead of emailing it:
+
+```bash
+curl -X POST "$APP_URL/api/documents/$DOC_ID/send" \
+  -H "Authorization: Bearer $PUUMERKKI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"signer@example.com","name":"Signer Name","notify":false}'
+# {"url":"https://.../sign/<token>","signingSessionId":"ss_...","expiresAt":"...","emailSent":false,...}
+```
+
+The recipient email is still recorded on the signing session and in the audit trail. The URL works for 30 days; treat it as a secret.
 
 The owner document HTML/PDF routes check token association but currently do not check token expiry; the signing submission and signer PDF endpoints do. Treat signing URLs as secrets. There is currently no document-list HTTP endpoint, webhook subscription API, or versioned API contract.
 

@@ -1,19 +1,11 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db";
 import { document, field, signingSession, user } from "@/db/schema";
 import { getApiIdentity } from "@/lib/api-auth";
 import { id, token } from "@/lib/ids";
 import { sendSigningEmail } from "@/lib/email";
-
-const Body = z.object({
-  email: z.string().email(),
-  name: z.string().optional(),
-  // Overrides the email's displayed sender name. Falls back to the
-  // document owner's account name when omitted.
-  senderName: z.string().trim().min(1).max(80).optional(),
-});
+import { LINK_ONLY_NOTE, SendBody } from "@/lib/send-options";
 
 export async function POST(
   req: Request,
@@ -38,7 +30,7 @@ export async function POST(
   }
 
   const json = await req.json();
-  const parsed = Body.safeParse(json);
+  const parsed = SendBody.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
@@ -64,6 +56,16 @@ export async function POST(
 
   const url = `${process.env.APP_URL ?? "http://localhost:3000"}/sign/${t}`;
 
+  if (!parsed.data.notify) {
+    return NextResponse.json({
+      url,
+      signingSessionId: sessionId,
+      expiresAt: expiresAt.toISOString(),
+      emailSent: false,
+      emailNote: LINK_ONLY_NOTE,
+    });
+  }
+
   const [owner] = await db.select().from(user).where(eq(user.id, identity.userId));
 
   const emailResult = await sendSigningEmail({
@@ -75,5 +77,11 @@ export async function POST(
     signingSessionId: sessionId,
   });
 
-  return NextResponse.json({ url, emailSent: emailResult.sent, emailNote: emailResult.note });
+  return NextResponse.json({
+    url,
+    signingSessionId: sessionId,
+    expiresAt: expiresAt.toISOString(),
+    emailSent: emailResult.sent,
+    emailNote: emailResult.note,
+  });
 }

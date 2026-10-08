@@ -17,6 +17,8 @@ First open-source release under AGPL-3.0-only.
 - Dockerfile, Render blueprint (`render.yaml`), and Render + Turso and Vercel + Turso guides.
 - CI (typecheck, lint, tests, build, Docker build) and GHCR image publishing on `v*` tags.
 - Headless API v1 design and OpenAPI 3.1 draft (design only; not implemented).
+- Link-only signing sessions: `POST /api/documents/[id]/send` accepts `notify: false` to skip the email and return the signing URL (plus `signingSessionId` and `expiresAt`) for the caller to deliver.
+- `PUT /api/documents/[id]/fields` accepts the service-account bearer key as well as a browser session.
 
 ### Security
 - Hardened authorization and input validation on document and signing routes.
@@ -25,6 +27,7 @@ First open-source release under AGPL-3.0-only.
 
 ### Fixed
 - Chromium launch on hosts without a usable HOME (crash reporting disabled, per-launch temp profile).
+- `emailSent` is now `false` (with the provider's message in `emailNote`) when Resend rejects a send; the SDK returns errors instead of throwing.
 
 ### Notes
 - Signatures are eIDAS Simple Electronic Signatures (SES). PAdES and trusted timestamps are planned for v1.1.

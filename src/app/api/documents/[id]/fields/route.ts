@@ -1,34 +1,21 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db";
 import { document, field } from "@/db/schema";
-import { getServerSession } from "@/lib/session";
+import { getApiIdentity } from "@/lib/api-auth";
+import { FieldsBody } from "@/lib/field-schema";
 import { id } from "@/lib/ids";
-
-const FieldSchema = z.object({
-  type: z.enum(["text", "textarea", "checkbox", "signature"]),
-  page: z.number().int().min(0),
-  x: z.number().int(),
-  y: z.number().int(),
-  width: z.number().int().min(10),
-  height: z.number().int().min(10),
-  label: z.string().optional(),
-  required: z.boolean().default(true),
-});
-
-const Body = z.object({ fields: z.array(FieldSchema) });
 
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const identity = await getApiIdentity(req);
+  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: docId } = await params;
   const [doc] = await db.select().from(document).where(eq(document.id, docId));
-  if (!doc || doc.ownerId !== session.user.id) {
+  if (!doc || doc.ownerId !== identity.userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -37,7 +24,7 @@ export async function PUT(
   }
 
   const json = await req.json();
-  const parsed = Body.safeParse(json);
+  const parsed = FieldsBody.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }

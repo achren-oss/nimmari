@@ -36,7 +36,7 @@ export async function sendSigningEmail(args: SendArgs) {
   `;
 
   try {
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
       from,
       to: args.to,
       subject: `${args.senderName} sent you "${args.documentTitle}" to sign`,
@@ -45,6 +45,9 @@ export async function sendSigningEmail(args: SendArgs) {
         ? [{ name: "signing_session_id", value: args.signingSessionId }]
         : undefined,
     });
+    // The Resend SDK reports API failures (bad key, unverified sender) in
+    // `error` instead of throwing.
+    if (error) return { sent: false, note: error.message || "Email failed" };
     return { sent: true };
   } catch (e) {
     return { sent: false, note: e instanceof Error ? e.message : "Email failed" };

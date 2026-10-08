@@ -83,6 +83,8 @@ Documents and signed outputs are stored in the database; back it up and test res
 
 ## Current API
 
+AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which line before creating fields, one signing session per signer, never sign or fill on the user's behalf.
+
 “Owner” below means an authenticated browser session or `Authorization: Bearer <PUUMERKKI_API_KEY>`, with document ownership enforced. Field placement accepts either; prefill currently accepts browser sessions only. An invalid bearer key is rejected on routes using service-account authentication.
 
 | Method | Endpoint | Auth | Purpose |

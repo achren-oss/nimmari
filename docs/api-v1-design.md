@@ -2,6 +2,8 @@
 
 Design draft, 2026-10-07. This document and `openapi/v1.yaml` describe proposed behavior, not implemented endpoints. The existing Next.js routes, Drizzle/libSQL schema, Better Auth, pdf-lib and Puppeteer remain the starting point.
 
+For agents using the current (pre-v1) API, see [AGENTS.md](../AGENTS.md): confirm signers and signature-line ownership before creating fields, and never sign or fill on the user's behalf. The same rules apply to v1 clients.
+
 ## Goals and non-goals
 
 Provide a self-hosted, workspace-isolated API for preparing PDF and HTML envelopes, collecting ordered recipient actions, embedding signing, retrieving immutable evidence, and receiving reliable webhooks. Publish a machine-readable OpenAPI 3.1 contract suitable for an eventual TypeScript SDK. Email is optional; headless workflows must work without it.

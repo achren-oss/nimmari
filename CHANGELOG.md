@@ -19,6 +19,7 @@ First open-source release under AGPL-3.0-only.
 - Headless API v1 design and OpenAPI 3.1 draft (design only; not implemented).
 - Link-only signing sessions: `POST /api/documents/[id]/send` accepts `notify: false` to skip the email and return the signing URL (plus `signingSessionId` and `expiresAt`) for the caller to deliver.
 - `PUT /api/documents/[id]/fields` accepts the service-account bearer key as well as a browser session.
+- `AGENTS.md`: guidance for AI agents using the API (confirm signers and signature-line ownership before placing fields; one session per signer, whose signature fills every signature field; link-only delivery; never sign or fill for the user) and the photo-to-link flow.
 
 ### Security
 - Hardened authorization and input validation on document and signing routes.

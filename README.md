@@ -78,7 +78,7 @@ Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABL
 ![Login](docs/screenshots/login.png)
 ![Dashboard](docs/screenshots/dashboard.png)
 ![Signing](docs/screenshots/sign.png)
-![Signed seal](docs/screenshots/signed-seal.png)
+![Signed document](docs/screenshots/signed-seal.png)
 
 ## Configuration
 

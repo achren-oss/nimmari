@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PDFDocument, PDFPage } from "pdf-lib";
 import { PNG } from "pngjs";
-import { cropSignaturePng, stampPdf } from "../stamp-pdf";
+import { cropSignaturePng, MIN_SIGNATURE_HEIGHT_PT, stampPdf } from "../stamp-pdf";
 
 function encodePng(data: Uint8Array, width: number, height: number): Uint8Array {
   const png = new PNG({ width, height });
@@ -20,29 +20,39 @@ function legacySignature(): Uint8Array {
 }
 
 describe("PDF signature cropping", () => {
-  it.each([{ width: 300, height: 60 }, { width: 100, height: 60 }])(
-    "crops legacy PNGs and draws centered, filling a $width x $height field",
-    async ({ width, height }) => {
+  it.each([
+    { width: 300, height: 20, expectedHeight: 40, expectedX: 40 },
+    { width: 300, height: 60, expectedHeight: 60, expectedX: 74.285714 },
+    { width: 100, height: 20, expectedHeight: 25.925926, expectedX: 40 },
+    { width: 300, height: 20, y: 0, expectedHeight: 20, expectedX: 151.428571 },
+    { width: 300, height: 20, pageWidth: 595, expectedHeight: 40, expectedX: 29.75 },
+    { width: 300, height: 20, x: 760, expectedHeight: 10.370370, expectedX: 760 },
+  ])(
+    "crops legacy PNGs and draws bottom-anchored in a $width x $height field",
+    async ({ width, height, y = 100, x = 40, pageWidth = 800, expectedHeight, expectedX }) => {
       const png = legacySignature();
       const cropped = PNG.sync.read(Buffer.from(cropSignaturePng(png)));
       expect([cropped.width, cropped.height]).toEqual([108, 28]);
       const pdf = await PDFDocument.create();
-      pdf.addPage([800, 842]);
+      pdf.addPage([pageWidth, 842]);
       const draw = vi.spyOn(PDFPage.prototype, "drawImage");
       try {
         const output = await stampPdf({
           pdfBytes: await pdf.save(),
-          fields: [{ type: "signature", page: 0, x: 40, y: 100, width, height, value: null }],
+          fields: [{ type: "signature", page: 0, x, y, width, height, value: null }],
           signaturePng: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
         });
         expect((await PDFDocument.load(output)).getPageCount()).toBe(1);
         const [image, options] = draw.mock.calls[0];
         expect([image.width, image.height]).toEqual([108, 28]);
-        const scale = Math.min(width / 108, height / 28);
-        expect(options?.width).toBeCloseTo(108 * scale);
-        expect(options?.height).toBeCloseTo(28 * scale);
-        expect(options?.x).toBeCloseTo(40 + (width - 108 * scale) / 2);
-        expect(options?.y).toBeCloseTo(842 - 100 - height + (height - 28 * scale) / 2);
+        expect(MIN_SIGNATURE_HEIGHT_PT).toBe(40);
+        expect(options?.width).toBeCloseTo(expectedHeight * 108 / 28);
+        expect(options?.height).toBeCloseTo(expectedHeight);
+        expect(options?.x).toBeCloseTo(expectedX);
+        expect(options?.y).toBeCloseTo(842 - (y + height) * pageWidth / 800);
+        expect(options!.y! + options!.height!).toBeLessThanOrEqual(842);
+        expect(options!.x! + options!.width!).toBeLessThanOrEqual(pageWidth);
+
       } finally {
         draw.mockRestore();
       }

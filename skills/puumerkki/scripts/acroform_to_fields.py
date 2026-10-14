@@ -2,6 +2,7 @@
 """Remove native form controls and export Puumerkki overlays (requires pypdf)."""
 import argparse
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -54,20 +55,24 @@ def main():
             if any(name.startswith(prefix) for prefix in args.skip_prefix):
                 continue
             field_type = inherited(widget, '/FT')
-            if field_type == '/Sig':
-                continue  # Never infer signature boxes from native fields.
-            if field_type not in ('/Tx', '/Btn', '/Ch'):
+            if field_type not in ('/Tx', '/Btn', '/Ch', '/Sig'):
                 raise ValueError('Unsupported AcroForm field type')
             if not name or name in names:
                 raise ValueError('Fields need unique names; normalize repeated widgets first')
             names.add(name)
             x1, y1, x2, y2 = map(float, widget['/Rect'])
             overlay_height = (y2 - y1) * scale
-            extra = max(0, 20 - overlay_height) if field_type != '/Btn' else 0
+            minimum_height = 40 * scale if field_type == '/Sig' else 20
+            extra = max(0, minimum_height - overlay_height) if field_type != '/Btn' else 0
+            output_height = max(10, round(overlay_height + extra))
+            output_y = round((height - y2) * scale - extra)
+            if field_type == '/Sig':
+                output_height = max(output_height, math.ceil(40 * scale))
+                output_y = round((height - y1) * scale) - output_height
             field = dict(name=name, label=name,
-                         type='checkbox' if field_type == '/Btn' else ('textarea' if field_type == '/Tx' and y2-y1 > 25 else 'text'),
-                         page=index, x=round(x1*scale), y=round((height-y2)*scale-extra),
-                         width=max(10, round((x2-x1)*scale)), height=max(10, round(overlay_height+extra)),
+                         type='signature' if field_type == '/Sig' else 'checkbox' if field_type == '/Btn' else ('textarea' if field_type == '/Tx' and y2-y1 > 25 else 'text'),
+                         page=index, x=round(x1*scale), y=output_y,
+                         width=max(10, round((x2-x1)*scale)), height=output_height,
                          required=bool(int(inherited(widget, '/Ff', 0)) & 2))
             if name in private:
                 field.update(type='hetu', required=True, privateForOtherSigners=True, assignedSignerKey=private[name])
@@ -85,7 +90,7 @@ def main():
     writer.write(args.output_dir / 'flattened.pdf')
     (args.output_dir / 'fields.json').write_text(json.dumps({'fields': fields}, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     print(json.dumps({'pages': len(reader.pages), 'fields': len(fields)}))
-    print('Reminder: add signature boxes manually, assigned to each signer key. Native widget values/appearances were removed; inspect every page.', file=sys.stderr)
+    print('Reminder: assign signature boxes to each signer key and add any missing signature lines. Native widget values/appearances were removed; inspect every page.', file=sys.stderr)
 
 
 if __name__ == '__main__':

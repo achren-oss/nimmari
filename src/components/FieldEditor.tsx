@@ -38,6 +38,7 @@ export function FieldEditor({
   initialFields: EditorField[];
 }) {
   const [numPages, setNumPages] = useState(0);
+  const [pageWidths, setPageWidths] = useState<Record<number, number>>({});
   const [tool, setTool] = useState<FieldType>("text");
   const [fields, setFields] = useState<EditorField[]>(initialFields);
   const [saving, setSaving] = useState(false);
@@ -52,20 +53,21 @@ export function FieldEditor({
       const x = e.clientX - target.left;
       const y = e.clientY - target.top;
       const d = DEFAULTS[tool];
+      const fieldHeight = tool === "signature" ? Math.max(d.height, Math.ceil(45 * PAGE_WIDTH / (pageWidths[page] ?? 595))) : d.height;
       const newField: EditorField = {
         id: `tmp_${Math.random().toString(36).slice(2)}`,
         type: tool,
         page,
         x: Math.round(x - d.width / 2),
-        y: Math.round(y - d.height / 2),
+        y: Math.round(y - fieldHeight / 2),
         width: d.width,
-        height: d.height,
+        height: fieldHeight,
         label: d.label,
         required: true,
       };
       setFields((f) => [...f, newField]);
     },
-    [tool],
+    [tool, pageWidths],
   );
 
   function startDrag(e: React.PointerEvent, id: string) {
@@ -161,7 +163,9 @@ export function FieldEditor({
                 onPointerMove={(e) => onDragMove(e, i)}
                 onPointerUp={endDrag}
               >
-                <Page pageNumber={i + 1} width={PAGE_WIDTH} renderTextLayer={false} />
+                <Page pageNumber={i + 1} width={PAGE_WIDTH} renderTextLayer={false}
+                  onLoadSuccess={(page) => setPageWidths((widths) => ({ ...widths, [i]: page.getViewport({ scale: 1 }).width }))}
+                />
                 {fields
                   .filter((f) => f.page === i)
                   .map((f) => (

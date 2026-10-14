@@ -45,7 +45,7 @@ appearances or remove controls that would obscure overlays before uploading.
 - `scripts/acroform_to_fields.py form.pdf --output-dir /tmp/new-form` writes
   `flattened.pdf` without widgets/AcroForm and `fields.json` in 800px coordinates.
   Requires `pypdf`; repeat `--skip-prefix PREFIX` or `--private NAME=signerKey`.
-  Native widget values/appearances are removed, not baked in. Add signature boxes
+  Native widget values/appearances are removed, not baked in. Assign imported signature boxes to signers and add missing boxes
   manually; review layout and required flags before upload.
 - `scripts/puumerkki_flow.py PDF --title TITLE --fields fields.json --prefill prefill.json
   --signers signers.json --no-send` prepares a draft and prints `documentId` and
@@ -75,6 +75,9 @@ Example fields file for `puumerkki_flow.py`:
 ```
 
 Adapt coordinates to the real printed form; these are illustrative, not a template.
+
+Signature fields should be about 40–45 PDF points tall, with their bottom on the signature line. Convert points to the 800px overlay coordinate space using `800 / pageWidthPt`. Stamping enforces a 40 pt minimum rendered height, growing upward without clipping and preserving the cropped image aspect ratio; field width and page bounds can limit this height. Native AcroForm signature boxes are extended upward to at least 40 pt while keeping their bottom.
+
 Types: `text`, `textarea`, `checkbox`, `date`, `hetu`, `signature`.
 `page` is an integer ≥ 0; `x`, `y`, `width`, `height` are integers;
 width/height ≥ 10. `name` and `assignedSignerKey` are trimmed, nonempty,

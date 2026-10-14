@@ -4,6 +4,51 @@ Design draft, 2026-10-07. This document and `openapi/v1.yaml` describe proposed 
 
 For agents using the current (pre-v1) API, see [AGENTS.md](../AGENTS.md): confirm signers and signature-line ownership before creating fields, and never sign or fill on the user's behalf. The same rules apply to v1 clients.
 
+## Implemented API baseline (production parity)
+
+The unversioned `/api` routes now support AcroForm import, merge/replace prefill
+with owner bearer authentication, required and multiline fields, date fields,
+unvalidated `hetu` text, private PDF viewer masking, sequential invitations,
+notification controls, combined audit seals and per-document timezones.
+See [the current OpenAPI contract](../openapi/current.yaml) and
+[the API reference](../skills/puumerkki/reference/api-cheatsheet.md).
+
+`POST /api/documents/{id}/send` accepts `signers` with unique `key` and optional
+zero-based `order`. Fields use `assignedSignerKey`, falling back to
+`assignedToSignerEmail`. The same email in several roles requires keys.
+Each slot has its own token; keys are routing identifiers, not credentials.
+Sending may add slots only before any signer signs; multi-signer signature
+fields must be assigned. PDF viewer artifacts rebuild from the original upload
+so other signers' private values do not exist in the viewer text layer. Completed
+PDFs expose every value to all parties.
+
+`POST /api/documents/{id}/cancel` (owner) and
+`POST /api/sign/{token}/decline` (unsigned, unexpired signer) accept optional
+reasons up to 1000 characters. Any decline terminates the whole document;
+there is no alternate decline policy. Current statuses are `draft`, `sent`,
+`completed`, `cancelled`, `declined`. Outstanding capabilities return 410 for
+stopped documents; already-signed slots retain read-only PDF downloads until
+expiry. Concurrent signing and stop operations serialize under a database write
+transaction and version checks, preserving signatures and one audit seal.
+
+Upload `notify="false"` suppresses all document emails. Send `notify:false`
+suppresses invitations and follow-ups for those slots; signed notices still use
+the document flag. Upload `auditTimezone` overrides `PUUMERKKI_AUDIT_TIMEZONE`
+(default `Europe/Helsinki`). Outbound `document.completed`, `document.cancelled`,
+and `document.declined` webhooks are best effort, optionally HMAC-signed with
+`PUUMERKKI_WEBHOOK_SECRET`; they are not the durable v1 outbox proposed below.
+
+OSS schema changes use numbered additive SQL migrations `0001`–`0004` after
+`0000_init`, registered in `drizzle/meta/_journal.json`. The existing
+`scripts/migrate.mjs` applies them to fresh or v1.0.0 databases without
+production's duplicate-column workarounds. Container support, health routes,
+and service-user provisioning remain part of OSS.
+
+Everything under `/v1` below is still a proposal. Current coordinates remain
+800px-wide, top-left overlays, not the PDF-point coordinate system proposed
+for v1. Current shared service credentials and session tokens are not the
+scoped workspace keys and hashed capabilities proposed for v1.
+
 ## Goals and non-goals
 
 Provide a self-hosted, workspace-isolated API for preparing PDF and HTML envelopes, collecting ordered recipient actions, embedding signing, retrieving immutable evidence, and receiving reliable webhooks. Publish a machine-readable OpenAPI 3.1 contract suitable for an eventual TypeScript SDK. Email is optional; headless workflows must work without it.

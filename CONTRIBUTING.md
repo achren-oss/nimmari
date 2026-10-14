@@ -10,11 +10,11 @@ Use Node.js 20.19+ or a newer supported version and npm:
 npm ci
 cp .env.example .env.local
 # Set BETTER_AUTH_SECRET and configure Chromium for HTML PDF rendering.
-npx drizzle-kit push
+node scripts/migrate.mjs
 npm run dev
 ```
 
-The schema command defaults to local SQLite. Export database variables before running Drizzle if you use a remote database. See [README.md](README.md) for configuration and the service user script.
+The migration script defaults to local SQLite and applies the numbered Drizzle journal migrations. Export database variables before running Drizzle if you use a remote database. See [README.md](README.md) for configuration and the service user script.
 
 ## Checks
 

@@ -18,14 +18,21 @@ Follow these rules.
    Always ask when the document has more than one signature line (for example
    employer, student and guardian). **Never guess.** If the answer is unclear,
    ask again before you continue.
-2. **One signing session = one signer.** `POST /api/documents/[id]/send`
-   creates a session for one recipient. That signer draws one signature, and
-   Puumerkki stamps it into **every** `signature` field in the document.
-   Only add signature fields for that signer's own lines. Leave other people's
-   lines without a field (they stay blank to be signed on paper or
-   separately), or prepare a separate document for each additional signer.
-3. **Text, multi-line text and checkbox fields** are filled by the signer.
-   Only add fields the user wants the signer to fill.
+2. **One signing session = one signer slot.** Send accepts one `email` or a
+   `signers` array with `email`, optional `name`, unique `key`, and optional
+   zero-based `order`. The drawn signature fills that slot's assigned signature
+   fields. For multiple signers, assign every signature field using
+   `assignedSignerKey` (preferred) or `assignedToSignerEmail`. Keys take
+   precedence over email. The same email in multiple roles requires distinct
+   keys and key-assigned fields; never infer roles from email alone.
+3. **Only add fields the user wants filled.** Supported types are `text`,
+   `textarea`, `checkbox`, `signature`, `date`, and `hetu`. `hetu` is unvalidated
+   personal identity text, not identity verification. Prefill user-supplied
+   values only with authorization; never invent values. `PUT …/prefill` accepts
+   owner bearer authentication and merges supplied keys by default; `clear:true`
+   or `mode:"replace"` clears omitted values. Signature prefill is forbidden.
+   Private fields are hidden from other signers during signing; completed PDFs
+   expose all values to all parties. Explain this before using private fields.
 4. **Deliver links the way the user asks.** If the user wants the link in
    chat, send with `"notify": false` (no email is sent), check that the
    response has `emailSent: false`, and return `url` in the conversation.
@@ -49,8 +56,8 @@ A user photographs a paper form and says "put this in Puumerkki, I'll sign":
    limit) → `{"id": "doc_…"}`.
 4. Place fields: `PUT /api/documents/[id]/fields` with
    `{"fields": [{"type", "page", "x", "y", "width", "height", "label", "required"}]}`.
-   - `type`: `text`, `textarea`, `checkbox` or `signature` (no date type;
-     use a labelled `text` field).
+   - `type`: `text`, `textarea`, `checkbox`, `signature`, `date`, or `hetu`.
+     For multiple signers include `assignedSignerKey` matching a send-time key.
    - `page` is 0-based. `x`, `y`, `width`, `height` are integers in pixels
      of the page rendered **800 px wide**, with the origin at the **top-left**
      and `y` growing downwards. Width and height are at least 10.
@@ -67,3 +74,38 @@ A user photographs a paper form and says "put this in Puumerkki, I'll sign":
 Authenticate with `Authorization: Bearer <PUUMERKKI_API_KEY>`. The key acts
 as the single user configured in `PUUMERKKI_API_OWNER_ID`, and can only reach
 that user's documents. See the [API table in the README](README.md#current-api).
+
+## Lifecycle, notifications, and signer slots
+
+- Prepare all fields and prefill while the document is a draft. AcroForm import
+  (`importAcroForm="true"` on PDF upload) helps extract rectangles, but verify
+  imported fields and assign signature slots explicitly before sending.
+- Parallel signing uses omitted/null `order`; sequential signing uses zero-based
+  orders. Equal orders may sign together. Later groups receive email invitations
+  after prior groups finish. Each returned URL belongs only to its signer slot.
+- Document upload `notify="false"` disables all document emails. Send
+  `notify:false` disables invitations and sequential follow-ups for those sessions;
+  signed notices still depend on the document setting. Use both for a fully
+  silent workflow and verify `emailSent:false` for every returned slot.
+- Signers cannot be added after any signature has been recorded. Cancelled,
+  declined, and completed documents cannot reopen. Create a new document instead.
+- With explicit authorization, an owner can `POST /api/documents/{id}/cancel`
+  with optional `{ "reason": "..." }` (up to 1000 characters). Cancellation is
+  terminal and blocks outstanding signing links.
+- `POST /api/sign/{token}/decline` is a signer action. An unsigned signer may
+  decline with an optional reason; this ends signing for everyone. Never perform
+  this decision for the signer. Stopped signing routes return 410. Already-signed
+  signers retain read-only PDF access until their token expires.
+- `GET /api/sign/{token}` exposes the slot's `signerKey` and permitted fields.
+  PDF submissions use field IDs; HTML submissions use field names. Do not open
+  links to fill or submit on a real person's behalf.
+- Upload `auditTimezone` overrides `PUUMERKKI_AUDIT_TIMEZONE` (default
+  `Europe/Helsinki`). Webhooks report `document.completed`, `document.cancelled`,
+  and `document.declined`; verify HMAC when a webhook secret is configured.
+
+See [the portable agent skill](skills/puumerkki/SKILL.md), its
+[API reference](skills/puumerkki/reference/api-cheatsheet.md), and the
+[implemented API OpenAPI contract](openapi/current.yaml). The skill uses client
+variables `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY`; the latter holds the
+OSS server's `PUUMERKKI_API_KEY`. Disposable synthetic tests are separate from
+real signing and require deliberate test authorization.

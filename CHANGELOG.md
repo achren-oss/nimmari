@@ -2,6 +2,26 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- AcroForm field import, date fields, unvalidated personal identity (`hetu`) fields, and signer-slot keys supporting multiple roles with the same email.
+- Multi-signer parallel/sequential routing, deferred invitations, private viewer PDFs, document notification controls, and completion/cancel/decline webhooks.
+- Per-document audit timezone and combined seals with a dedicated seal page when needed.
+- Owner cancellation, signer decline, and the portable `skills/puumerkki` agent workflow and helper scripts.
+- Four journaled additive migrations after `0000_init`, plus fresh-install and v1.0.0-upgrade tests.
+- Production regression tests and a separate OpenAPI contract for the implemented API.
+
+### Changed
+- Prefill accepts owner bearer authentication and merges by default, with explicit replace/clear modes.
+- Required-field indicators and all-missing validation, responsive signer pages, and PDF text wrapping/shrinking preserve entered values.
+- Signed artifacts rebuild from original source with all signer slots and a single audit seal; completed PDFs expose all values to all parties.
+- Pin PDF.js to the react-pdf worker version and update Next.js to 16.3.8.
+
+### Fixed
+- Serialize concurrent signing and stop transitions; reject adding signers after signing begins and unassigned multi-signer signature fields.
+- Exclude private values from later signers' PDF text layers and enforce token expiry on document HTML/PDF downloads.
+
 ## [1.0.0] - Unreleased
 
 First open-source release under AGPL-3.0-only.

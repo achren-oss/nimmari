@@ -14,4 +14,4 @@ For troubleshooting, set `PUUMERKKI_RATE_LIMIT_DEBUG=1` to add `X-RateLimit-Coun
 
 ## Upgrade
 
-Install v1.1.1 or use `ghcr.io/puumerkki/puumerkki:1.1.1`. Before starting the updated application, run `node --env-file=.env.local scripts/migrate.mjs` to apply the journaled migrations, including idempotent `0007_rate_limits.sql` for both rate-limit tables. The Docker image runs migrations automatically before startup.
+Install v1.1.1 or use `ghcr.io/achren-oss/puumerkki:1.1.1`. Before starting the updated application, run `node --env-file=.env.local scripts/migrate.mjs` to apply the journaled migrations, including idempotent `0007_rate_limits.sql` for both rate-limit tables. The Docker image runs migrations automatically before startup.

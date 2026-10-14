@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field, signingSession, user } from "@/db/schema";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { id, token } from "@/lib/ids";
 import { sendSigningEmail } from "@/lib/email";
 import { SendBody } from "@/lib/send-options";
@@ -18,7 +18,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const identity = await getApiIdentity(req);
-  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!identity) return authenticationFailure(req);
 
   const { id: docId } = await params;
   const [doc] = await db.select().from(document).where(eq(document.id, docId));

@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field, signingSession } from "@/db/schema";
 import { buildViewerPdf, shouldViewStampedPdf, signedPdfForTokenViewer } from "@/lib/signer-view-pdf";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { checkSigningTokenAccess } from "@/lib/token-access";
 import { renderHtmlToPdf } from "@/lib/render-pdf";
 
@@ -51,6 +51,7 @@ export async function GET(
     if (allowed && s) { viewerEmail = s.recipientEmail; viewerKey = s.signerKey; }
   } else {
     const identity = await getApiIdentity(req);
+    if (!identity) return authenticationFailure(req);
     allowed = !!identity && identity.userId === doc.ownerId;
   }
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

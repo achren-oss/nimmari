@@ -213,3 +213,14 @@ describe("account management", () => {
     expect(await database.select().from(schema.session).where(eq(schema.session.userId, owner.id))).toEqual([]);
   });
 });
+
+it("returns 429 for repeated bearer failures without blocking valid credentials", async () => {
+  const req = (key: string) => new Request("http://localhost/api/keys", {
+    headers: { authorization: `Bearer ${key}`, "x-real-ip": "auth-throttle-test" },
+  });
+  for (let i = 0; i < 30; i++) expect((await keys.GET(req("invalid"))).status).toBe(401);
+  const limited = await keys.GET(req("invalid"));
+  expect(limited.status).toBe(429);
+  expect(Number(limited.headers.get("Retry-After"))).toBeGreaterThan(0);
+  expect((await keys.GET(req("test-root-key"))).status).toBe(200);
+});

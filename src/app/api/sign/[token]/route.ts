@@ -35,10 +35,12 @@ const Body = z.object({
 });
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
+  const limited = signRateLimit(req, token);
+  if (limited) return limited;
   const [s] = await db.select().from(signingSession).where(eq(signingSession.token, token));
   if (!s) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
   if (s.expiresAt < new Date()) {
@@ -77,9 +79,9 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ token: string }> },
 ) {
-  const limited = signRateLimit(req);
-  if (limited) return limited;
   const { token } = await params;
+  const limited = signRateLimit(req, token);
+  if (limited) return limited;
   const [s] = await db.select().from(signingSession).where(eq(signingSession.token, token));
   if (!s) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
   if (s.expiresAt < new Date()) {

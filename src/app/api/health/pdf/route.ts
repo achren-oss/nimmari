@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { renderHtmlToPdf } from "@/lib/render-pdf";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ export const maxDuration = 60;
 // timing or the launch/render error. Root/admin bearer key only.
 export async function GET(req: Request) {
   const who = await getApiIdentity(req, { allowOwnerlessRoot: true });
-  if (!who || who.via === "session" || who.scope !== "admin") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!who || who.via === "session" || who.scope !== "admin") return authenticationFailure(req);
   const t0 = Date.now();
   try {
     const pdf = await renderHtmlToPdf("<html><body><p>Puumerkki PDF self-check</p></body></html>");

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { document, field } from "@/db/schema";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { id } from "@/lib/ids";
 import { sha256Hex } from "@/lib/hash";
 import { extractAcroFormFields } from "@/lib/acroform";
@@ -11,7 +11,7 @@ const MAX_PDF_BYTES = 4 * 1024 * 1024; // 4 MB — under Vercel's 4.5 MB body li
 
 export async function POST(req: Request) {
   const identity = await getApiIdentity(req);
-  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!identity) return authenticationFailure(req);
 
   const form = await req.formData();
   const file = form.get("pdf");

@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Use GitHub private vulnerability reporting: open this repository's **Security** tab and select **Report a vulnerability**. Do not report vulnerabilities through public issues or disclose sensitive details publicly.
+Use GitHub private vulnerability reporting: [submit a private security advisory](https://github.com/puumerkki/puumerkki/security/advisories/new). Do not report vulnerabilities through public issues or disclose sensitive details publicly.
 
 Include affected versions, reproduction steps, expected and actual behavior, potential impact, and a minimal proof of concept where possible. Remove credentials, signing tokens, personal data, and real documents from reports.
 
@@ -17,3 +17,13 @@ The latest release and the current `main` branch are supported. Older releases s
 Reports about authentication, authorization, signing-token handling, document confidentiality or integrity, HTML sanitization, PDF rendering, and exploitable dependency issues are welcome. Provide evidence of how a dependency issue affects Puumerkki. Operational misconfiguration and third-party services may require action by their operators. Test only deployments you own or are authorized to test.
 
 Puumerkki is self-hosted. Self-hosters are responsible for their deployments, including updates, HTTPS, secrets, access controls, database backups, and data retention.
+
+## Security model
+
+- Public signup is disabled. Administrators provision accounts; browser sessions identify document owners. Document operations enforce ownership. Admin scope manages accounts and keys but does not grant access to other owners' documents.
+- Database API keys contain 256 random bits and are stored as SHA-256 hashes with a display prefix. The environment root key is an operator-managed secret. Invalid bearer credentials never fall back to session cookies.
+- Signing links are bearer secrets generated with `crypto.randomBytes(24)` (192 bits), encoded as base64url, and expire after 30 days. Token routes check expiry and document lifecycle. Anyone holding a link can act as that signer; deliver it privately.
+- Sliding-window rate limits allow 60 signer requests per minute per IP, 60 reads per minute per token, and 20 writes per minute per token (submission and decline share a budget). Bearer authentication permits 30 failures per minute per IP, then returns HTTP 429 with `Retry-After`. Successful authentication does not consume this failure budget.
+- Limits are in memory and per instance, reset on restart, and are not a distributed denial-of-service defense. Multi-instance and serverless deployments should add edge rate limiting. Configure the reverse proxy to overwrite `X-Forwarded-For`/`X-Real-IP`; direct clients must not be able to spoof trusted IP headers.
+- Responses set CSP, deny framing, disable MIME sniffing, suppress referrers (including signing tokens), disable camera/microphone/geolocation, and advertise two-year HSTS including subdomains. HSTS takes effect over HTTPS. CSP permits inline styles and scripts needed by the app, same-origin PDF.js workers, and data/blob image previews; it is defense in depth alongside HTML sanitization. Production does not enable script evaluation; development permits it and WebSockets for Next.js.
+- Signatures are Simple Electronic Signatures (SES) only. There is no identity verification, certificate-backed PAdES signature, or trusted timestamp service. Audit hashes support integrity checking; they do not establish signer identity.

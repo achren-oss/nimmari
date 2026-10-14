@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field, signingSession } from "@/db/schema";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { checkSigningTokenAccess } from "@/lib/token-access";
 import { fillHtml } from "@/lib/html-form";
 
@@ -40,6 +40,7 @@ export async function GET(
     allowed = access === "ok";
   } else {
     const identity = await getApiIdentity(req);
+    if (!identity) return authenticationFailure(req);
     allowed = !!identity && identity.userId === doc.ownerId;
   }
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

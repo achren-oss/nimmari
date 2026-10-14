@@ -14,11 +14,13 @@ Documents are stored in your configured database. Optional Resend email sends si
 
 ## Features
 
-- PDF field placement for text, multi-line text, checkboxes, and signatures.
+- PDF field placement for text, multi-line text, checkboxes, dates, personal identity text, and signatures; optional AcroForm import.
 - HTML form mode using `data-pm-field`, including multi-line `<textarea>` fields.
 - Signer links with a 30-day expiry and no signer account requirement.
-- Audit footer with signing metadata and a SHA-256 content hash.
-- Optional Resend email and signed click-event webhooks.
+- Combined audit seals with signing metadata, timezone controls, and a SHA-256 content hash.
+- Parallel or sequential signer slots, including several roles with the same email.
+- Private signing views, merge prefill, required-field validation, cancellation, and decline.
+- Optional Resend email, notification controls, signed click-event webhooks, and outbound lifecycle webhooks.
 - Service-account API key for supported document endpoints.
 
 ## Quick start
@@ -30,7 +32,7 @@ npm ci
 cp .env.example .env.local
 # Set BETTER_AUTH_SECRET to a strong random value in .env.local.
 # For HTML PDF rendering, set PUPPETEER_EXECUTABLE_PATH to your browser binary.
-npx drizzle-kit push
+node scripts/migrate.mjs
 npm run dev
 ```
 
@@ -53,6 +55,8 @@ See [.env.example](.env.example). Empty optional values disable the correspondin
 | `PUUMERKKI_API_OWNER_ID` | Existing user ID that owns service-account documents |
 | `SERVICE_USER_EMAIL` | Email for the service-user creation script |
 | `SERVICE_USER_NAME` | Name for that script; `Service Account` |
+| `PUUMERKKI_AUDIT_TIMEZONE` | Default IANA timezone for audit seals (`Europe/Helsinki`) |
+| `PUUMERKKI_WEBHOOK_SECRET` | Optional HMAC-SHA256 secret for outbound document webhooks |
 | `RESEND_API_KEY` | Optional email API key |
 | `RESEND_FROM` | Verified sender identity for optional email |
 | `RESEND_WEBHOOK_SECRET` | Signing secret for Resend webhook verification |
@@ -85,22 +89,25 @@ Documents and signed outputs are stored in the database; back it up and test res
 
 AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which line before creating fields, one signing session per signer, never sign or fill on the user's behalf.
 
-“Owner” below means an authenticated browser session or `Authorization: Bearer <PUUMERKKI_API_KEY>`, with document ownership enforced. Field placement accepts either; prefill currently accepts browser sessions only. An invalid bearer key is rejected on routes using service-account authentication.
+“Owner” below means an authenticated browser session or `Authorization: Bearer <PUUMERKKI_API_KEY>`, with document ownership enforced. Field placement and prefill accept either. An invalid bearer key is rejected on routes using service-account authentication.
 
 | Method | Endpoint | Auth | Purpose |
 | --- | --- | --- | --- |
 | GET | `/api/health` | None | Liveness and database check; `{"status":"ok"}` or 503 |
 | GET, POST | `/api/auth/[...all]` | Better Auth route-specific | Signup, login, logout, session and other Better Auth handlers |
-| POST | `/api/documents` | Owner | Upload multipart `pdf` and optional `title`; returns document ID (4 MB limit) |
+| POST | `/api/documents` | Owner | Upload multipart `pdf`, optional `title`, `importAcroForm`, `notify`, `webhookUrl`, `auditTimezone`; returns document ID (4 MB limit) |
 | POST | `/api/documents/html` | Owner | Upload multipart `html` file or string and optional `title`; extracts fields (2 MB limit) |
 | GET | `/api/documents/[id]` | Owner | Read document metadata, fields, and signing sessions |
 | PUT | `/api/documents/[id]/fields` | Owner | Replace draft PDF fields with JSON `{fields: [...]}` |
-| PUT | `/api/documents/[id]/prefill` | Owner browser session | Set or clear draft field values with JSON `{values: {...}}` |
-| POST | `/api/documents/[id]/send` | Owner | Create a signing session; JSON `email`, optional `name`, `senderName` and `notify` (default `true`); returns `url`, `signingSessionId`, `expiresAt`, `emailSent`, and optional `emailNote`. With `notify: false` no email is sent and you deliver `url` yourself |
+| PUT | `/api/documents/[id]/prefill` | Owner | Merge draft field values with JSON `{values: {...}}`; `clear:true` or `mode:"replace"` clears omitted keys |
+| POST | `/api/documents/[id]/send` | Owner | Create one session per signer slot; JSON `email` or `signers:[{email,name,key,order}]`, optional `senderName` and `notify` (default `true`); returns `url`, `signingSessionId`, `expiresAt`, `emailSent`, and optional `emailNote`. With `notify: false` no email is sent and you deliver `url` yourself |
 | GET | `/api/documents/[id]/pdf` | Owner or matching `?t=` signing token | Read original PDF, or signed PDF with `signed=1` |
 | GET | `/api/documents/[id]/html` | Owner or matching `?t=` signing token | Read HTML; `signed=1` for signed output, `print=1` for browser printing |
-| POST | `/api/sign/[token]` | Unexpired signing token | Submit JSON `values` and optional `signaturePng` data URL; complete signing |
-| GET | `/api/sign/[token]/pdf` | Unexpired signing token | Download completed signed PDF |
+| GET | `/api/sign/[token]` | Unexpired signing token | Read signer slot and permitted fields |
+| POST | `/api/documents/[id]/cancel` | Owner | Cancel a draft or sent document; optional `{reason}` |
+| POST | `/api/sign/[token]/decline` | Unexpired unsigned signing token | Decline for all signers; optional `{reason}` |
+| POST | `/api/sign/[token]` | Unexpired signing token | Submit JSON `values` and `signaturePng` (PNG data URL or null); record this signer slot |
+| GET | `/api/sign/[token]/pdf` | Unexpired signing token | Download signed copy for an already-signed slot |
 | POST | `/api/webhooks/resend` | Verified Svix-style signature | Record Resend signing-link click events |
 
 Link-only delivery, for example a bot that returns the signing link in a chat instead of emailing it:
@@ -115,7 +122,15 @@ curl -X POST "$APP_URL/api/documents/$DOC_ID/send" \
 
 The recipient email is still recorded on the signing session and in the audit trail. The URL works for 30 days; treat it as a secret.
 
-The owner document HTML/PDF routes check token association but currently do not check token expiry; the signing submission and signer PDF endpoints do. Treat signing URLs as secrets. There is currently no document-list HTTP endpoint, webhook subscription API, or versioned API contract.
+All signing-token routes check expiry. Cancel/decline invalidate outstanding links; previously signed slots retain read-only PDF access until expiry. There is no document-list endpoint, webhook subscription API, or implemented versioned API.
+
+The [portable Puumerkki agent skill](skills/puumerkki/README.md) includes a full workflow, [API reference](skills/puumerkki/reference/api-cheatsheet.md), and helpers. Clients use `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY` (set to the OSS server's `PUUMERKKI_API_KEY`). The implemented contract is [openapi/current.yaml](openapi/current.yaml); [openapi/v1.yaml](openapi/v1.yaml) remains the future design.
+
+PDF uploads support `importAcroForm="true"` to extract native field rectangles; inspect the returned count, warnings, and errors. Both upload routes accept `webhookUrl`, `notify="false"`, and `auditTimezone`. For fully silent operation, disable notify at upload and send. Send-time `notify:false` disables invitations and sequential follow-ups only; signed notices follow the document setting.
+
+Assign multi-signer signature fields to `assignedSignerKey` matching each signer's unique `key`, or to `assignedToSignerEmail`. Keys take precedence. The same email may sign in multiple roles using distinct keys. Omit `order` for parallel signing; set zero-based orders for sequential groups. Signers cannot be added after signing starts. Draft fields include `date` (normalized date text) and `hetu` (unvalidated personal identity text). Required fields are marked and all missing fields are reported together.
+
+Later PDF signers see accumulated values and signatures with other signers' private values excluded from the PDF text layer. Completed PDFs show **all values to all parties**, including private fields. Signed artifacts rebuild from the original source under a write transaction and use one combined audit seal, adding a dedicated seal page when necessary. Seal timestamps use upload `auditTimezone`, then `PUUMERKKI_AUDIT_TIMEZONE`, then `Europe/Helsinki`. Completion, cancellation, and decline emit best-effort webhooks; `PUUMERKKI_WEBHOOK_SECRET` enables HMAC-SHA256 signatures.
 
 ## HTML form authoring
 
@@ -131,7 +146,7 @@ Start from [the sample Consulting Agreement](scripts/fixtures/sample-form.html).
 
 `data-pm-field` identifies the key in submitted or prefilled `values`. `data-pm-label` supplies a human-readable label and falls back to the field name. The presence of `data-pm-required` marks a field required, even if its value is `"false"`; omit it for optional fields. `data-pm-type="signature"` explicitly identifies a signature slot; use the `pm-signature` class for the clickable signing placeholder. Give the slot a visible height in CSS.
 
-Inputs and textareas are text fields; `<textarea>` preserves line breaks in signed output. Checkbox inputs are checkbox fields. For radio groups, put `data-pm-field` on a fieldset containing radio inputs with a shared `name` and distinct `value` attributes. Native date inputs remain text values in the API.
+Inputs and textareas are text fields; `<textarea>` preserves line breaks in signed output. Checkbox inputs are checkbox fields. For radio groups, put `data-pm-field` on a fieldset containing radio inputs with a shared `name` and distinct `value` attributes. Native date inputs extract as `date` fields. Use `data-pm-type="hetu"` for unvalidated personal identity text. `data-pm-signer-key` (alias `data-pm-role`) assigns a signer slot, `data-pm-signer` assigns by email, and `data-pm-private` hides values from other signers during signing.
 
 HTML is sanitized, scripts are removed, and external resources are blocked during PDF rendering. Embed images and fonts as data URLs and include layout CSS in the form itself.
 

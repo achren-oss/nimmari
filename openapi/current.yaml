@@ -1,0 +1,1057 @@
+openapi: 3.1.0
+info:
+  title: Puumerkki implemented API
+  version: 1.0.0+unreleased
+  description: Implemented unversioned routes. Shared owner bearer key or Better Auth
+    session; signer tokens are secret capabilities. SES drawn signatures only. Proposed
+    /v1 routes are documented separately in v1.yaml.
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+servers:
+- url: http://localhost:3000
+  description: Replace with your self-hosted instance origin.
+security:
+- ownerBearer: []
+- ownerSession: []
+paths:
+  /api/documents:
+    post:
+      operationId: postApiDocuments
+      summary: Upload PDF
+      description: 4 MiB limit. AcroForm import does not flatten widgets. Inspect
+        imported rectangles and assign signer slots before sending.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: &id001
+                    type: string
+                  importedFields:
+                    type:
+                    - integer
+                    - boolean
+                  errors:
+                    type: array
+                    items: *id001
+                  warnings:
+                    type: array
+                    items: *id001
+                  error: *id001
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Body exceeds limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title: *id001
+                notify: &id002
+                  type: string
+                  enum:
+                  - 'true'
+                  - 'false'
+                  default: 'true'
+                webhookUrl: &id003
+                  type: string
+                  format: uri
+                auditTimezone: &id004
+                  type: string
+                  description: IANA timezone; overrides PUUMERKKI_AUDIT_TIMEZONE (default
+                    Europe/Helsinki).
+                pdf:
+                  type: string
+                  format: binary
+                importAcroForm:
+                  type: string
+                  enum:
+                  - 'true'
+                  - 'false'
+              required:
+              - pdf
+  /api/documents/html:
+    post:
+      operationId: postApiDocumentsHtml
+      summary: Upload annotated HTML
+      description: 2 MiB file limit; raw strings use character count. Sanitized data-pm-field
+        controls supply fields and signer assignments.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: *id001
+                  fieldCount: &id006
+                    type: integer
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Body exceeds limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title: *id001
+                notify: *id002
+                webhookUrl: *id003
+                auditTimezone: *id004
+                html:
+                  type: string
+                  description: HTML file part or raw HTML string.
+              required:
+              - html
+  /api/documents/{id}:
+    get:
+      operationId: getApiDocumentsId
+      summary: Read owner document
+      description: ''
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+  /api/documents/{id}/fields:
+    put:
+      operationId: putApiDocumentsIdFields
+      summary: Replace draft PDF fields
+      description: Replaces all fields and generates new IDs. Coordinates are integers
+        on an 800px-wide page, zero-based page, top-left origin. Key assignment takes
+        precedence over email. Completed PDFs expose all private values.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: &id005
+                    type: boolean
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fields:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/FieldInput'
+              required:
+              - fields
+  /api/documents/{id}/prefill:
+    put:
+      operationId: putApiDocumentsIdPrefill
+      summary: Merge or replace draft prefill
+      description: Merge by default; clear=true or mode=replace clears omitted fields.
+        Signature fields are excluded.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: *id005
+                  filled: *id006
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prefill'
+  /api/documents/{id}/send:
+    post:
+      operationId: postApiDocumentsIdSend
+      summary: Create signing slots
+      description: email supports one signer; nonempty signers takes precedence. Keys
+        default to signer-N and must be unique. Duplicate emails with email-only assigned
+        fields are rejected; assign by key. Multi-signer signatures must be assigned.
+        No additions after signing starts. Orders are zero-based; omitted/null is
+        parallel, equal orders form a group. Invitations for later groups are deferred.
+        Links expire after 30 days.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendResult'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Send'
+  /api/documents/{id}/cancel:
+    post:
+      operationId: postApiDocumentsIdCancel
+      summary: Cancel document
+      description: Optional or empty body. Draft/sent only. Terminal, emits document.cancelled
+        webhook.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: *id005
+                  status:
+                    const: cancelled
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+  /api/sign/{token}/decline:
+    post:
+      operationId: postApiSignTokenDecline
+      summary: Decline document
+      description: An unexpired unsigned slot on a sent document may decline. Ends
+        signing for everyone, emits document.declined webhook, and emails owner when
+        document notify is enabled.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: *id005
+                  status:
+                    const: declined
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Expired token or stopped document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Signing rate limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: *id001
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+  /api/sign/{token}:
+    get:
+      operationId: getApiSignToken
+      summary: Read signer slot
+      description: Private fields belonging to other slots are excluded. Stopped documents
+        return 410.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignerView'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Expired token or stopped document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: *id001
+      security: []
+    post:
+      operationId: postApiSignToken
+      summary: Submit signer values and signature
+      description: Signer action only. PDF values use field IDs; HTML values use names.
+        Date values normalize to ISO; hetu has no validation. Required fields and
+        sequential order are enforced. Concurrent signing/stop transitions serialize;
+        artifacts rebuild from original source.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: *id005
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Expired token or stopped document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Body exceeds limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Signing rate limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: *id001
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Sign'
+  /api/documents/{id}/pdf:
+    get:
+      operationId: getApiDocumentsIdPdf
+      summary: Read document PDF
+      description: Owner or matching unexpired t token. Private PDF values are excluded
+        during signing, exposed to all in completed PDFs. Cancelled/declined unsigned
+        tokens are blocked; previously signed slots retain signed PDF access until
+        expiry.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Expired token or stopped document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Artifact unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      - name: signed
+        in: query
+        schema:
+          type: string
+          enum:
+          - '0'
+          - '1'
+      - name: t
+        in: query
+        schema: *id001
+      security:
+      - ownerBearer: []
+      - ownerSession: []
+      - signingToken: []
+  /api/documents/{id}/html:
+    get:
+      operationId: getApiDocumentsIdHtml
+      summary: Read document HTML
+      description: Owner or matching unexpired t token. Private PDF values are excluded
+        during signing, exposed to all in completed PDFs. Cancelled/declined unsigned
+        tokens are blocked; previously signed slots retain signed PDF access until
+        expiry.
+      responses:
+        '200':
+          description: Success
+          content:
+            text/html:
+              schema: *id001
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Expired token or stopped document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Artifact unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      - name: signed
+        in: query
+        schema:
+          type: string
+          enum:
+          - '0'
+          - '1'
+      - name: t
+        in: query
+        schema: *id001
+      - name: print
+        in: query
+        schema:
+          type: string
+          enum:
+          - '0'
+          - '1'
+      security:
+      - ownerBearer: []
+      - ownerSession: []
+      - signingToken: []
+  /api/sign/{token}/pdf:
+    get:
+      operationId: getApiSignTokenPdf
+      summary: Download signed copy
+      description: Requires this slot to have signed; expiry still applies. Signed
+        slots retain read-only access after cancellation/decline. Private values remain
+        masked on stopped incomplete PDFs; completed PDFs expose all values.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Lifecycle or signing-order conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Expired token or stopped document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Artifact unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: *id001
+      security: []
+components:
+  securitySchemes:
+    ownerBearer:
+      type: http
+      scheme: bearer
+      description: PUUMERKKI_API_KEY mapped to PUUMERKKI_API_OWNER_ID; invalid bearer
+        headers do not fall back to session auth.
+    ownerSession:
+      type: apiKey
+      in: cookie
+      name: better-auth.session_token
+      description: Better Auth session; secure deployments may use the __Secure- cookie
+        prefix.
+    signingToken:
+      type: apiKey
+      in: query
+      name: t
+      description: Unexpired signing token associated with this document.
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: *id001
+        status: *id001
+      required:
+      - error
+    Signer:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        name: *id001
+        key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        order:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+      required:
+      - email
+    Send:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        name: *id001
+        senderName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        signers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Signer'
+        notify:
+          type: boolean
+          default: true
+          description: Invitations and follow-ups only; upload notify=false suppresses
+            all document emails.
+    Link:
+      type: object
+      properties:
+        key: *id001
+        url:
+          type: string
+          format: uri
+          description: Secret signing capability; deliver only to this signer slot.
+        signingSessionId: *id001
+        emailSent: *id005
+        emailNote: *id001
+      required:
+      - key
+      - url
+      - signingSessionId
+      - emailSent
+    SendResult:
+      oneOf:
+      - allOf:
+        - $ref: '#/components/schemas/Link'
+        - type: object
+          properties:
+            expiresAt:
+              type: string
+              format: date-time
+          required:
+          - expiresAt
+      - type: object
+        properties:
+          signers:
+            type: array
+            items:
+              allOf:
+              - $ref: '#/components/schemas/Link'
+              - type: object
+                properties:
+                  email: *id001
+                  name: &id007
+                    type:
+                    - string
+                    - 'null'
+                  order:
+                    type:
+                    - integer
+                    - 'null'
+          expiresAt:
+            type: string
+            format: date-time
+        required:
+        - signers
+        - expiresAt
+    FieldInput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - text
+          - textarea
+          - checkbox
+          - signature
+          - date
+          - hetu
+        page:
+          type: integer
+          minimum: 0
+        x: *id006
+        y: *id006
+        width:
+          type: integer
+          minimum: 10
+        height:
+          type: integer
+          minimum: 10
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        label: *id001
+        required:
+          type: boolean
+          default: true
+        privateForOtherSigners:
+          type: boolean
+          default: false
+        assignedSignerKey:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 200
+        assignedToSignerEmail:
+          type:
+          - string
+          - 'null'
+          format: email
+      required:
+      - type
+      - page
+      - x
+      - y
+      - width
+      - height
+    Field:
+      type: object
+      properties:
+        id: *id001
+        name: *id007
+        type: *id001
+        label: *id007
+        required: *id005
+        prefilled: *id005
+        value: *id007
+        privateForOtherSigners: *id005
+        assignedSignerKey: *id007
+        assignedToSignerEmail: *id007
+        page:
+          type:
+          - integer
+          - 'null'
+        x:
+          type:
+          - integer
+          - 'null'
+        y:
+          type:
+          - integer
+          - 'null'
+        width:
+          type:
+          - integer
+          - 'null'
+        height:
+          type:
+          - integer
+          - 'null'
+    Session:
+      type: object
+      properties:
+        signerKey: *id007
+        recipientEmail: *id001
+        recipientName: *id007
+        signedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        declinedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        linkClickedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        expiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        declineReason: *id007
+    Document:
+      type: object
+      properties:
+        id: *id001
+        title: *id001
+        kind:
+          type: string
+          enum:
+          - pdf
+          - html
+        status:
+          type: string
+          enum:
+          - draft
+          - sent
+          - completed
+          - cancelled
+          - declined
+        cancelledAt: *id007
+        cancelReason: *id007
+        declinedAt: *id007
+        declineReason: *id007
+        createdAt: *id001
+        updatedAt: *id001
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+        signingSessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+    Prefill:
+      type: object
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 5000
+          description: PDF field IDs or HTML field names. Signatures cannot be prefilled.
+        clear: *id005
+        mode:
+          type: string
+          enum:
+          - merge
+          - replace
+          default: merge
+      required:
+      - values
+    Reason:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+    Sign:
+      type: object
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 5000
+        signaturePng:
+          type:
+          - string
+          - 'null'
+          description: PNG data URL; required for signature fields. Never submit for
+            a real signer.
+      required:
+      - values
+      - signaturePng
+    SignerView:
+      type: object
+      properties:
+        documentId: *id001
+        kind: *id001
+        title: *id001
+        recipientEmail: *id001
+        recipientName: *id007
+        signerKey: *id007
+        signedAt: *id007
+        fields:
+          type: array
+          items:
+            type: object
+            description: Permitted fields only, with prefilled/readOnly flags; keys
+              and shape depend on PDF or HTML.
+x-webhook-events:
+  events:
+  - document.completed
+  - document.cancelled
+  - document.declined
+  description: Best-effort POST to upload webhookUrl. Optional X-Puumerkki-Signature
+    is lowercase hex HMAC-SHA256 of exact raw body bytes with PUUMERKKI_WEBHOOK_SECRET.
+    No durable retries or subscription API.

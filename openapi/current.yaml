@@ -553,10 +553,26 @@ paths:
       description: Owner or matching unexpired t token. Private PDF values are excluded
         during signing, exposed to all in completed PDFs. Cancelled/declined unsigned
         tokens are blocked; previously signed slots retain signed PDF access until
-        expiry.
+        expiry. With signed=1, sent documents return the intermediate PDF; poll
+        for completed status before retrieving the final artifact.
       responses:
         '200':
           description: Success
+          headers:
+            Content-Length:
+              description: Length in bytes of the served PDF.
+              schema:
+                type: integer
+                minimum: 0
+            X-Content-SHA256:
+              description: Hex SHA-256 of the served PDF bytes.
+              schema:
+                type: string
+                pattern: '^[0-9a-f]{64}$'
+            Repr-Digest:
+              description: 'SHA-256 of the served bytes, formatted as sha-256=:<base64>:'
+              schema:
+                type: string
           content:
             application/pdf:
               schema:
@@ -592,6 +608,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '503':
+          description: Incomplete PDF withheld; retry after the indicated delay.
+          headers:
+            Retry-After:
+              description: Retry delay in seconds.
+              schema:
+                type: integer
+                enum: [2]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: PDF not ready
       parameters:
       - name: id
         in: path
@@ -691,6 +721,21 @@ paths:
       responses:
         '200':
           description: Success
+          headers:
+            Content-Length:
+              description: Length in bytes of the served PDF.
+              schema:
+                type: integer
+                minimum: 0
+            X-Content-SHA256:
+              description: Hex SHA-256 of the served PDF bytes.
+              schema:
+                type: string
+                pattern: '^[0-9a-f]{64}$'
+            Repr-Digest:
+              description: 'SHA-256 of the served bytes, formatted as sha-256=:<base64>:'
+              schema:
+                type: string
           content:
             application/pdf:
               schema:
@@ -720,6 +765,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '503':
+          description: Incomplete PDF withheld; retry after the indicated delay.
+          headers:
+            Retry-After:
+              description: Retry delay in seconds.
+              schema:
+                type: integer
+                enum: [2]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: PDF not ready
       parameters:
       - name: token
         in: path

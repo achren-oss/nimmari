@@ -1,3 +1,4 @@
+import { pdfResponse } from "@/lib/pdf-response";
 import { stoppedDocumentResponse } from "@/lib/document-stop";
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
@@ -70,13 +71,7 @@ export async function GET(
       const original = doc.pdf instanceof Uint8Array ? doc.pdf : Buffer.from(doc.pdf as ArrayBuffer);
       const viewerBytes = await buildViewerPdf({ originalPdf: original, fields, signedSessions, viewerEmail, viewerKey });
       const safeTitle = doc.title.replace(/[^\w\-. ]+/g, "_");
-      return new NextResponse(viewerBytes as BodyInit, {
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `inline; filename="${safeTitle}.pdf"`,
-          "Cache-Control": "private, no-store",
-        },
-      });
+      return pdfResponse(viewerBytes, `${safeTitle}.pdf`);
     }
   }
 
@@ -117,11 +112,5 @@ export async function GET(
     });
   }
   const safeTitle = doc.title.replace(/[^\w\-. ]+/g, "_");
-  return new NextResponse(bytes as BodyInit, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${safeTitle}.pdf"`,
-      "Cache-Control": "private, no-store",
-    },
-  });
+  return pdfResponse(bytes, `${safeTitle}.pdf`);
 }

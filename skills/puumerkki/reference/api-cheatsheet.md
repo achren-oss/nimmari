@@ -232,6 +232,7 @@ signature exists, but return 409 once signing has started. Re-upload to change f
 | 410 | Expired link or cancelled/declined document; inspect error and status, stop signing |
 | 413 | Upload/sign body exceeds limit |
 | 429 | Signer route IP rate limit; honor Retry-After |
+| 503 | Incomplete PDF withheld: `{"error":"PDF not ready"}`; retry after `Retry-After: 2` |
 
 Cancelled/declined token GET/POST signing routes return 410 with
 `{"error":"Document cancelled","status":"cancelled"}` (or declined).
@@ -261,12 +262,18 @@ python3 scripts/fetch_signed_pdf.py DOC_ID final.pdf --timeout 300
 The helper uses `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` from the
 environment for owner Bearer authentication, without printing the key. It polls
 `GET /api/documents/{id}` (`--poll-interval` defaults to 2 seconds), then downloads
-`/api/documents/{id}/pdf?signed=1`. It checks `%PDF-`, `%%EOF`, and successful
-`pdfinfo` parsing when available, with up to three download attempts and 1-/2-second
-backoff. Only validated bytes replace the output. `--timeout` limits completion
+`/api/documents/{id}/pdf?signed=1`. PDF responses send `Content-Length`,
+`X-Content-SHA256` (hex SHA-256 of the served bytes), and `Repr-Digest: sha-256=:<base64>:`. The helper requires matching
+length and SHA-256, `%PDF-`, `startxref`, `%%EOF` in the last 2048 bytes, and successful
+`pdfinfo` parsing when available. It retries transport failures and mismatches, with
+up to three download attempts and 1-/2-second backoff; 503 honors `Retry-After`.
+Only validated bytes replace the output. `--timeout` limits completion
 polling, defaulting to 300 seconds; cancelled/declined documents fail immediately.
-Never trust the first byte stream: fetching immediately after the last signer POST
-once yielded an 8 KB truncated PDF with no trailer; a refetch seconds later was valid.
+Validate every downloaded PDF: transport truncation can remove the trailer,
+even when the server generated a complete artifact.
+The server withholds incomplete PDF bytes with 503 and `Retry-After: 2`.
+`signed=1` while status is `sent` continues to return the intermediate signed PDF;
+poll for `completed` before treating it as the final artifact.
 Equivalent retrieval must also poll and validate before rendering or delivery.
 
 PDF-source multi-signer documents always use a dedicated combined seal page;

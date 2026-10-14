@@ -36,9 +36,49 @@ node --env-file=.env.local scripts/migrate.mjs
 npm run dev
 ```
 
+**Shell environment variables override `.env.local`** in both Node.js and Next.js. Stale exported `DATABASE_URL` or `PUUMERKKI_API_KEY` values can silently direct migrations/dev to the wrong database or secret. Check your shell and unset stale values before starting (for example, `unset DATABASE_URL PUUMERKKI_API_KEY`).
+
 Provision an account through the admin API as described below, then log in at http://localhost:3000. The migration script reads `.env.local` and defaults to `file:./local.db`; set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` there for a remote database. Next.js also loads `.env.local` for the application. `npm run db:push` is development-only; use migrations for deployments.
 
 Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABLE_PATH` to its executable. On Vercel, `@sparticuz/chromium-min` is used, with a pinned Chromium pack downloaded at runtime. PDF uploads use pdf-lib directly.
+
+### First run
+
+1. Set `BETTER_AUTH_SECRET` and a strong `PUUMERKKI_API_KEY` root secret in `.env.local`, run migrations, and start the app using Quick start above. Public signup is disabled.
+2. In a private terminal with tracing disabled, load the same root secret into `ROOT_KEY` and set `BASE_URL=http://localhost:3000`. Create the first account:
+
+   ```sh
+   set +x
+   curl --fail-with-body "$BASE_URL/api/accounts" \
+     -H "Authorization: Bearer $ROOT_KEY" -H 'Content-Type: application/json' \
+     -d '{"email":"owner@example.com","name":"Document Owner"}'
+   ```
+
+   Save the returned account `id` as `OWNER_ID` and the generated password securely. Log in at `/login` with that email and password.
+3. Create a regular agent key for that account:
+
+   ```sh
+   curl --fail-with-body "$BASE_URL/api/keys" \
+     -H "Authorization: Bearer $ROOT_KEY" -H 'Content-Type: application/json' \
+     -d "{\"name\":\"Document agent\",\"scope\":\"regular\",\"ownerUserId\":\"$OWNER_ID\"}"
+   ```
+
+   Save the returned plaintext `key` securely as `AGENT_KEY`; it is shown once. Keep the root secret for administration.
+4. Verify the agent key and server:
+
+   ```sh
+   curl --fail-with-body "$BASE_URL/api/health"
+   curl --fail-with-body "$BASE_URL/api/keys" -H "Authorization: Bearer $AGENT_KEY"
+   ```
+
+   Expect health status `ok` and the owner's key metadata. Give integrations the regular key. Set `PUUMERKKI_API_OWNER_ID` to the account ID and restart only if root also needs document access.
+
+## Screenshots
+
+![Login](docs/screenshots/login.png)
+![Dashboard](docs/screenshots/dashboard.png)
+![Signing](docs/screenshots/sign.png)
+![Signed seal](docs/screenshots/signed-seal.png)
 
 ## Configuration
 
@@ -73,7 +113,7 @@ Puumerkki is self-host only. Pick one:
 
 - **Render + Turso (recommended):** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
-- **Any Docker host:** use the prebuilt image `ghcr.io/puumerkki/puumerkki:1.0.0` (published from `v*` tags), or `docker build -t puumerkki .`, then
+- **Any Docker host:** use the prebuilt image `ghcr.io/puumerkki/puumerkki:1.1.0` (published from `v*` tags), or `docker build -t puumerkki .`, then
   `docker run -p 3000:3000 -v puumerkki-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host puumerkki`.
   Without `DATABASE_URL` the image uses a SQLite file at `/data/puumerkki.db` (mount a volume). Migrations run on start; `/api/health` reports status.
 
@@ -225,7 +265,7 @@ These are planned ideas, not current capabilities:
 
 - Headless API v1: workspaces, API keys, an envelope/signer/field model, immutable event log, webhooks, OpenAPI, and a TypeScript SDK.
 - docker-compose for local use and S3-compatible storage.
-- v1.1: PAdES certificate-signed PDFs and RFC 3161 timestamps.
+- Future: PAdES certificate-signed PDFs and RFC 3161 timestamps.
 - Optional “Sign in with AgentID” OIDC integration idea.
 
 ## Contributing
@@ -235,10 +275,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), including the [Developer Certificate of 
 ## Security
 
 See [SECURITY.md](SECURITY.md) for private vulnerability reporting and deployment responsibilities.
-
-## License
-
-[AGPL-3.0-only](LICENSE).
 
 ## License
 

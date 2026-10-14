@@ -4,7 +4,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-14
+
 ### Added
+- Security response headers and sliding-window signer and bearer-failure rate limits, with route authentication coverage tests.
 - Admin/root account listing and safe deletion with owner/document protection and transactional credential cleanup. Apply journaled `0006_account_disabled.sql` before deployment.
 - Admin account provisioning and scoped, hashed API keys with metadata listing, revocation, and best-effort usage tracking.
 - Idempotent `0005_api_keys.sql` registered in the migration journal, authentication tests, and bootstrap documentation.
@@ -25,6 +28,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Pin PDF.js to the react-pdf worker version and update Next.js to 16.3.8.
 
 ### Fixed
+- Signature sizing and placement preserve signature aspect ratio within assigned field bounds.
 - Serve PDF downloads with Content-Length and SHA-256 integrity headers; withhold incomplete PDFs with HTTP 503 and Retry-After. The signed PDF helper verifies length, checksum, and trailer markers before saving and honors Retry-After.
 - Serialize concurrent signing and stop transitions; reject adding signers after signing begins and unassigned multi-signer signature fields.
 - Exclude private values from later signers' PDF text layers and enforce token expiry on document HTML/PDF downloads.
@@ -58,6 +62,8 @@ First open-source release under AGPL-3.0-only.
 - `emailSent` is now `false` (with the provider's message in `emailNote`) when Resend rejects a send; the SDK returns errors instead of throwing.
 
 ### Notes
-- Signatures are eIDAS Simple Electronic Signatures (SES). PAdES and trusted timestamps are planned for v1.1.
+- Signatures are eIDAS Simple Electronic Signatures (SES). PAdES and trusted timestamps remain future work.
 
 [1.0.0]: https://github.com/puumerkki/puumerkki/releases/tag/v1.0.0
+
+[1.1.0]: https://github.com/puumerkki/puumerkki/releases/tag/v1.1.0

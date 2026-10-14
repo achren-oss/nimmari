@@ -55,9 +55,20 @@ export const document = sqliteTable("document", {
   pdf: blob("pdf"),
   htmlSource: text("html_source"),
   contentHash: text("content_hash"),
-  status: text("status", { enum: ["draft", "sent", "completed"] }).notNull().default("draft"),
+  status: text("status", { enum: ["draft", "sent", "completed", "cancelled", "declined"] }).notNull().default("draft"),
+  version: integer("version").notNull().default(0),
+  cancelledAt: integer("cancelled_at", { mode: "timestamp" }),
+  cancelReason: text("cancel_reason"),
+  declinedAt: integer("declined_at", { mode: "timestamp" }),
+  declineReason: text("decline_reason"),
   signedPdf: blob("signed_pdf"),
   signedHtml: text("signed_html"),
+  // Webhook URL to POST when all required signers have signed.
+  webhookUrl: text("webhook_url"),
+  // If true, send email notifications to signers (default). API can set to false.
+  notify: integer("notify", { mode: "boolean" }).notNull().default(true),
+  // IANA timezone for seal timestamps in signed artifacts (e.g. Europe/Helsinki).
+  auditTimezone: text("audit_timezone"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -65,7 +76,7 @@ export const document = sqliteTable("document", {
 export const field = sqliteTable("field", {
   id: text("id").primaryKey(),
   documentId: text("document_id").notNull().references(() => document.id, { onDelete: "cascade" }),
-  type: text("type", { enum: ["text", "textarea", "checkbox", "signature"] }).notNull(),
+  type: text("type", { enum: ["text", "textarea", "checkbox", "signature", "date", "hetu"] }).notNull(),
   // Coords only used for kind="pdf" docs (where the recipient sees the rendered
   // PDF and the field is overlaid). For kind="html" docs the field is a real
   // form element in the HTML source; coords are null.
@@ -82,6 +93,13 @@ export const field = sqliteTable("field", {
   // Pre-filled fields are baked into the signer's view as disabled, and the
   // sign API ignores any tampered submissions for them.
   prefilled: integer("prefilled", { mode: "boolean" }).notNull().default(false),
+  // If true, this field is private to the signer (e.g. a personal identity code) and must
+  // not be visible to other signers. Private fields are masked in others' views
+  // and are only included in the final PDF delivered to the owner.
+  privateForOtherSigners: integer("private_for_other_signers", { mode: "boolean" }).notNull().default(false),
+  // For multi-signer docs: which signer this field is assigned to (null = all signers).
+  assignedToSignerEmail: text("assigned_to_signer_email"),
+  assignedSignerKey: text("assigned_signer_key"),
 });
 
 export const signingSession = sqliteTable("signing_session", {
@@ -89,8 +107,11 @@ export const signingSession = sqliteTable("signing_session", {
   documentId: text("document_id").notNull().references(() => document.id, { onDelete: "cascade" }),
   recipientEmail: text("recipient_email").notNull(),
   recipientName: text("recipient_name"),
+  signerKey: text("signer_key"),
   token: text("token").notNull().unique(),
   signedAt: integer("signed_at", { mode: "timestamp" }),
+  declinedAt: integer("declined_at", { mode: "timestamp" }),
+  declineReason: text("decline_reason"),
   signedIp: text("signed_ip"),
   signedUserAgent: text("signed_user_agent"),
   // Set by the Resend webhook when the recipient clicks the "Review & sign"
@@ -99,4 +120,9 @@ export const signingSession = sqliteTable("signing_session", {
   linkClickedAt: integer("link_clicked_at", { mode: "timestamp" }),
   expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  // For documents with multiple signers: the order in which this signer should
+  // sign (0-based). Null = no enforced order (all signers can sign in parallel).
+  signerOrder: integer("signer_order"),
+  // Whether to email this signer their invite (set from send-time notify precedence).
+  inviteEmailEnabled: integer("invite_email_enabled", { mode: "boolean" }).notNull().default(true),
 });

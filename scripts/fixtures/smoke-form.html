@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Consulting Agreement</title>
+<style>
+body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 24px; }
+label { display: block; margin-top: 16px; }
+input, textarea { display: block; width: 100%; box-sizing: border-box; padding: 8px; }
+.pm-signature { height: 90px; border-bottom: 1px solid #333; margin-top: 16px; }
+</style></head>
+<body><h1>Consulting Agreement</h1>
+<p>The consultant will provide the services described below to the client.</p>
+<form data-pm-form>
+<label>Client name<input data-pm-field="client_name" data-pm-label="Client name" data-pm-required></label>
+<label>Start date<input type="date" data-pm-field="start_date" data-pm-label="Start date" data-pm-required></label>
+<label>Scope of services<textarea rows="5" data-pm-field="scope" data-pm-label="Scope of services" data-pm-required></textarea></label>
+<label>Date<input type="date" data-pm-field="date" data-pm-label="Date" data-pm-required></label>
+<div class="pm-signature" data-pm-field="signature" data-pm-label="Client signature" data-pm-type="signature" data-pm-required>Sign here</div>
+</form></body></html>

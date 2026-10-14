@@ -5,7 +5,10 @@ import { notFound } from "next/navigation";
 import { SignerView } from "@/components/ClientPdf";
 import { HtmlSignerView } from "@/components/HtmlSignerView";
 import { getServerSession } from "@/lib/session";
-import { fillHtml, htmlToShadowParts } from "@/lib/html-form";
+import { fillHtml, htmlToShadowParts, htmlVisibleToSigner } from "@/lib/html-form";
+import { fieldsVisibleToSigner } from "@/lib/field-visibility";
+import { buildSignerFieldPayload, initialSignerValues } from "@/lib/signer-fields";
+import { overlayFieldsForViewer, shouldViewStampedPdf } from "@/lib/signer-view-pdf";
 
 export default async function SignPage({
   params,
@@ -18,6 +21,13 @@ export default async function SignPage({
 
   const [doc] = await db.select().from(document).where(eq(document.id, s.documentId));
   if (!doc) notFound();
+
+  if (doc.status === "cancelled" || doc.status === "declined") {
+    return <main className="signed-state">
+      <h1>{doc.status === "cancelled" ? "This document has been cancelled" : "This document has been declined"}</h1>
+      {s.signedAt && <p><a href={`/api/sign/${token}/pdf`}>View signed PDF →</a></p>}
+    </main>;
+  }
 
   const session = await getServerSession();
   let savedSignature: string | null = null;
@@ -56,8 +66,9 @@ export default async function SignPage({
 
   if (doc.kind === "html") {
     const allFields = await db.select().from(field).where(eq(field.documentId, doc.id));
+    const visibleFields = fieldsVisibleToSigner(allFields, s.recipientEmail, s.signerKey);
     const prefilled: Record<string, string> = {};
-    for (const f of allFields) {
+    for (const f of visibleFields) {
       if (f.prefilled && f.name && f.value !== null) {
         prefilled[f.name] = f.value;
       }
@@ -67,7 +78,7 @@ export default async function SignPage({
         ? fillHtml(doc.htmlSource ?? "", prefilled, null, { disableMode: "filled-only" })
         : (doc.htmlSource ?? "");
 
-    const { styles: shadowStyles, body: shadowBody } = htmlToShadowParts(renderedHtml);
+    const { styles: shadowStyles, body: shadowBody } = htmlToShadowParts(htmlVisibleToSigner(renderedHtml, allFields, s));
 
     return (
       <HtmlSignerView
@@ -84,6 +95,20 @@ export default async function SignPage({
   }
 
   const fields = await db.select().from(field).where(eq(field.documentId, s.documentId));
+  const sessions = await db
+    .select()
+    .from(signingSession)
+    .where(eq(signingSession.documentId, s.documentId));
+  const viewingStamped = shouldViewStampedPdf({
+    kind: doc.kind,
+    hasSignedPdf: !!doc.signedPdf,
+    priorSignedCount: sessions.filter((x) => x.signedAt).length,
+  });
+  const signerFields = overlayFieldsForViewer(
+    buildSignerFieldPayload(fields, s.recipientEmail, s.signerKey),
+    viewingStamped,
+  );
+  const initialValues = initialSignerValues(signerFields);
 
   return (
     <SignerView
@@ -92,19 +117,8 @@ export default async function SignPage({
       documentTitle={doc.title}
       recipientName={s.recipientName}
       recipientEmail={s.recipientEmail}
-      fields={fields
-        .filter((f) => f.page !== null && f.x !== null && f.y !== null && f.width !== null && f.height !== null)
-        .map((f) => ({
-          id: f.id,
-          type: f.type,
-          page: f.page!,
-          x: f.x!,
-          y: f.y!,
-          width: f.width!,
-          height: f.height!,
-          label: f.label ?? undefined,
-          required: f.required,
-        }))}
+      fields={signerFields}
+      initialValues={initialValues}
       savedSignature={savedSignature}
       isLoggedIn={!!session?.user}
     />

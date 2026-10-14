@@ -32,8 +32,24 @@ describe("fields body", () => {
   it("accepts an empty list", () => {
     expect(FieldsBody.parse({ fields: [] }).fields).toEqual([]);
   });
+  it("accepts date, hetu, and privacy metadata", () => {
+    const r = FieldsBody.parse({
+      fields: [
+        { ...f, type: "date", name: "start_date" },
+        {
+          ...f,
+          type: "hetu",
+          name: "hetu",
+          privateForOtherSigners: true,
+          assignedToSignerEmail: "signer@example.com",
+        },
+      ],
+    });
+    expect(r.fields[0].type).toBe("date");
+    expect(r.fields[1].privateForOtherSigners).toBe(true);
+  });
   it.each([
-    { ...f, type: "date" },
+    { ...f, type: "invalid" },
     { ...f, width: 5 },
     { ...f, page: -1 },
     { ...f, x: 1.5 },

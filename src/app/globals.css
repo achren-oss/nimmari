@@ -681,6 +681,7 @@ a { color: inherit; }
 @media (max-width: 980px) {
   .signer-grid { grid-template-columns: 1fr; }
 }
+.signer-grid > * { min-width: 0; }
 
 .signer-form-wrap {
   background: var(--paper);
@@ -1157,3 +1158,37 @@ a { color: inherit; }
   color: var(--ink);
 }
 .signed-state p { color: var(--ink-soft); font-style: italic; }
+
+.decline-control > button {
+  color: var(--accent);
+  padding: 8px 0;
+  font-size: 13px;
+  text-decoration: underline;
+}
+.decline-dialog {
+  position: fixed;
+  z-index: 100;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 28px));
+  max-height: 85dvh;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  box-shadow: 0 0 0 100vmax rgba(29, 40, 57, 0.45);
+}
+.decline-dialog textarea {
+  display: block;
+  width: 100%;
+  min-height: 100px;
+  margin: 12px 0;
+}
+.decline-dialog button { margin: 8px 16px 0 0; }
+@media (max-width: 720px) {
+  .signer-mobile-bar { flex-wrap: wrap; }
+  .signer-mobile-bar .decline-control { order: 3; width: 100%; }
+  .signer-mobile-bar .decline-control > button { padding: 0; }
+  .signer-shell { padding-bottom: 150px; }
+}

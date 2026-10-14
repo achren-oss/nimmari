@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { document, signingSession } from "@/db/schema";
+import { document, field, signingSession } from "@/db/schema";
 import { getApiIdentity } from "@/lib/api-auth";
 
 export async function GET(
@@ -17,11 +17,35 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const fields = await db
+    .select({
+      id: field.id,
+      name: field.name,
+      type: field.type,
+      label: field.label,
+      required: field.required,
+      privateForOtherSigners: field.privateForOtherSigners,
+      assignedSignerKey: field.assignedSignerKey,
+      assignedToSignerEmail: field.assignedToSignerEmail,
+      page: field.page,
+      x: field.x,
+      y: field.y,
+      width: field.width,
+      height: field.height,
+      prefilled: field.prefilled,
+      value: field.value,
+    })
+    .from(field)
+    .where(eq(field.documentId, docId));
+
   const sessions = await db
     .select({
+      signerKey: signingSession.signerKey,
       recipientEmail: signingSession.recipientEmail,
       recipientName: signingSession.recipientName,
       signedAt: signingSession.signedAt,
+      declinedAt: signingSession.declinedAt,
+      declineReason: signingSession.declineReason,
       linkClickedAt: signingSession.linkClickedAt,
       expiresAt: signingSession.expiresAt,
       createdAt: signingSession.createdAt,
@@ -34,8 +58,13 @@ export async function GET(
     title: doc.title,
     kind: doc.kind,
     status: doc.status,
+    cancelledAt: doc.cancelledAt,
+    cancelReason: doc.cancelReason,
+    declinedAt: doc.declinedAt,
+    declineReason: doc.declineReason,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
     signingSessions: sessions,
+    fields,
   });
 }

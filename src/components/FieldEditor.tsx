@@ -6,7 +6,7 @@ import "@/components/PdfWorker";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-export type FieldType = "text" | "textarea" | "checkbox" | "signature";
+export type FieldType = "text" | "textarea" | "checkbox" | "signature" | "date" | "hetu";
 
 export type EditorField = {
   id: string;
@@ -26,6 +26,8 @@ const DEFAULTS: Record<FieldType, { width: number; height: number; label: string
   textarea: { width: 240, height: 100, label: "Multiline text" },
   checkbox: { width: 24, height: 24, label: "Check" },
   signature: { width: 220, height: 70, label: "Sign here" },
+  date: { width: 150, height: 32, label: "Date" },
+  hetu: { width: 150, height: 32, label: "Personal identity code" },
 };
 
 export function FieldEditor({
@@ -118,14 +120,14 @@ export function FieldEditor({
         <div className="side-card">
           <h3>Place a field</h3>
           <div className="tool-list">
-            {(["text", "textarea", "checkbox", "signature"] as FieldType[]).map((t) => (
+            {(["text", "textarea", "checkbox", "signature", "date", "hetu"] as FieldType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTool(t)}
                 className={`tool-btn ${tool === t ? "on" : ""}`}
               >
-                <span className="tool-ico">{(t === "text" || t === "textarea") ? "T" : t === "checkbox" ? "☐" : "✎"}</span>
-                {t === "text" ? "Text field" : t === "textarea" ? "Multiline text" : t === "checkbox" ? "Checkbox" : "Signature"}
+                <span className="tool-ico">{(t === "text" || t === "textarea" || t === "date" || t === "hetu") ? "T" : t === "checkbox" ? "☐" : "✎"}</span>
+                {t === "text" ? "Text field" : t === "textarea" ? "Multiline text" : t === "checkbox" ? "Checkbox" : t === "date" ? "Date" : t === "hetu" ? "Personal identity code" : "Signature"}
               </button>
             ))}
           </div>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SignatureSidebar, type SignatureSidebarHandle } from "@/components/SignatureSidebar";
+import { DeclineButton } from "@/components/DeclineButton";
 import { MobileSignBar } from "@/components/MobileSignBar";
 
 const DRAFT_PREFIX = "puumerkki:draft:";
@@ -294,9 +295,14 @@ export function HtmlSignerView({
     // also use the returned data URL inline below.
     const rescued = signaturePng ?? sidebarRef.current?.commitPending() ?? null;
 
-    let missing: string | null = null;
+    // Collect ALL missing required fields at once (not just the first).
+    r.querySelectorAll<HTMLElement>("[data-pm-missing]").forEach((el) => {
+      el.removeAttribute("data-pm-missing");
+      el.style.outline = "";
+      el.style.outlineOffset = "";
+    });
+    const missing: { label: string; el: HTMLElement }[] = [];
     r.querySelectorAll<HTMLElement>("[data-pm-required]").forEach((el) => {
-      if (missing) return;
       const name = el.getAttribute("data-pm-field");
       if (!name) return;
       const label = el.getAttribute("data-pm-label") ?? name;
@@ -305,22 +311,23 @@ export function HtmlSignerView({
       const isSig =
         el.classList.contains("pm-signature") ||
         el.getAttribute("data-pm-type") === "signature";
-      if (isSig) {
-        if (!rescued) missing = label;
-        return;
-      }
-      if (tag === "input" && type === "checkbox") {
-        if (!(el as HTMLInputElement).checked) missing = label;
-        return;
-      }
-      if (tag === "fieldset") {
-        if (!values[name]) missing = label;
-        return;
-      }
-      if (!values[name]?.trim()) missing = label;
+      let isMissing = false;
+      if (isSig) isMissing = !rescued;
+      else if (tag === "input" && type === "checkbox") isMissing = !(el as HTMLInputElement).checked;
+      else if (tag === "fieldset") isMissing = !values[name];
+      else isMissing = !values[name]?.trim();
+      if (isMissing) missing.push({ label, el });
     });
-    if (missing) {
-      setError(`Please complete: ${missing}`);
+    if (missing.length > 0) {
+      for (const m of missing) {
+        m.el.setAttribute("data-pm-missing", "true");
+        m.el.style.outline = "2px solid #dc2626";
+        m.el.style.outlineOffset = "2px";
+      }
+      setError(
+        `Complete ${missing.length} remaining required fields: ${missing.map((m) => m.label).join(", ")}`,
+      );
+      missing[0].el.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
@@ -373,6 +380,7 @@ export function HtmlSignerView({
 
           {error && <div className="form-error">{error}</div>}
 
+          <DeclineButton token={token} disabled={submitting} />
           <button onClick={submit} disabled={submitting} className="btn-primary big">
             {submitting ? "Sealing..." : "Seal & submit"} <span className="arr">→</span>
           </button>
@@ -380,6 +388,7 @@ export function HtmlSignerView({
       </div>
 
       <MobileSignBar
+        token={token}
         hasSignature={!!signaturePng}
         submitting={submitting}
         onSubmit={submit}

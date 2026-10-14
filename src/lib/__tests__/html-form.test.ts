@@ -66,7 +66,17 @@ describe("multiline HTML fields", () => {
   const value = 'First line\n\n<unsafe>& last line';
 
   it("parses textarea as a required text field", () => {
-    expect(extractFields(html)).toEqual([{ name: "notes", label: "notes", type: "text", required: true }]);
+    expect(extractFields(html)).toEqual([
+      {
+        name: "notes",
+        label: "notes",
+        type: "text",
+        required: true,
+        assignedToSignerEmail: null,
+        assignedSignerKey: null,
+        privateForOtherSigners: false,
+      },
+    ]);
   });
   it("prefills textarea content and keeps the existing lock rules", () => {
     const $ = cheerio.load(fillHtml(html + '<textarea data-pm-field="empty"></textarea>', { notes: value }, null, { disableMode: "filled-only" }));

@@ -5,6 +5,7 @@ import { getApiIdentity } from "@/lib/api-auth";
 import { id } from "@/lib/ids";
 import { sha256Hex } from "@/lib/hash";
 import { sanitizeFormHtml, extractFields, inferTitle } from "@/lib/html-form";
+import { isSafeWebhookUrl } from "@/lib/webhook";
 
 const MAX_HTML_BYTES = 2 * 1024 * 1024; // 2 MB — generous; pure HTML rarely exceeds 100 kB
 
@@ -15,6 +16,13 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("html");
   const titleInput = (form.get("title") as string)?.trim() ?? "";
+  const webhookUrl = form.get("webhookUrl") as string | null;
+  const notify = form.get("notify") === "false" ? false : true;
+  const auditTimezone = (form.get("auditTimezone") as string | null)?.trim() || null;
+
+  if (webhookUrl && !isSafeWebhookUrl(webhookUrl)) {
+    return NextResponse.json({ error: "Webhook URL is not allowed" }, { status: 400 });
+  }
 
   let raw: string;
   if (file instanceof File) {
@@ -64,6 +72,9 @@ export async function POST(req: Request) {
     htmlSource: sanitized,
     contentHash,
     status: "draft",
+    webhookUrl: webhookUrl || null,
+    notify,
+    auditTimezone,
     createdAt: now,
     updatedAt: now,
   });
@@ -76,6 +87,9 @@ export async function POST(req: Request) {
       name: f.name,
       label: f.label,
       required: f.required,
+      privateForOtherSigners: f.privateForOtherSigners,
+      assignedSignerKey: f.assignedSignerKey,
+      assignedToSignerEmail: f.assignedToSignerEmail,
     })),
   );
 

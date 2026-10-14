@@ -7,11 +7,11 @@ import { OPS, Util, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-const state = vi.hoisted(() => ({ db: null as unknown, webhook: vi.fn(), email: vi.fn() }));
+const state = vi.hoisted(() => ({ db: null as unknown, webhook: vi.fn(), email: vi.fn(), rateLimit: { response: null as Response | null, count: 1 as number | null } }));
 vi.mock("resend", () => ({ Resend: class { emails = { send: state.email }; } }));
 vi.mock("@/db", () => ({ get db() { return state.db; } }));
 vi.mock("@/lib/api-auth", () => ({ getApiIdentity: async () => ({ userId: "owner" }) }));
-vi.mock("@/lib/rate-limit", () => ({ signRateLimit: () => null }));
+vi.mock("@/lib/rate-limit", () => ({ signRateLimit: () => null, signRateLimitWithCount: () => state.rateLimit }));
 vi.mock("@/lib/render-pdf", () => ({ renderHtmlToPdf: async () => {
   const { PDFDocument } = await import("pdf-lib");
   const pdf = await PDFDocument.create(); pdf.addPage(); return pdf.save();
@@ -322,4 +322,34 @@ describe("post-signing email outcomes", () => {
     const response = await sign(request({ values: {}, signaturePng: SIG }), tokenParams("t0"));
     expect(await response.json()).toEqual({ ok: true, copyEmailSent: failed !== "copy", senderEmailSent: failed !== "sender" });
   });
+});
+
+it("adds signing GET debug counts to allowed and limited responses only when enabled", async () => {
+  const original = process.env.PUUMERKKI_RATE_LIMIT_DEBUG;
+  try {
+    process.env.PUUMERKKI_RATE_LIMIT_DEBUG = "1";
+    const allowed = await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"));
+    expect(allowed.status).toBe(404);
+    expect(allowed.headers.get("X-RateLimit-Count")).toBe("1");
+    expect(allowed.headers.get("X-RateLimit-IpKey")).toMatch(/^[0-9a-f]{8}$/);
+    expect(allowed.headers.has("X-RateLimit-Ip")).toBe(false);
+    const publicResponse = await readSign(new Request("http://localhost", { headers: { "x-real-ip": "8.8.8.8" } }), tokenParams("missing-debug-token"));
+    expect(publicResponse.headers.get("X-RateLimit-IpKey")).toMatch(/^[0-9a-f]{8}$/);
+    expect(publicResponse.headers.has("X-RateLimit-Ip")).toBe(false);
+    state.rateLimit = { response: Response.json({ error: "Too many requests" }, { status: 429 }), count: 61 };
+    const limited = await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"));
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("X-RateLimit-Count")).toBe("61");
+    state.rateLimit = { response: null, count: 1 };
+    process.env.PUUMERKKI_RATE_LIMIT_DEBUG = "0";
+    expect((await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"))).headers.has("X-RateLimit-IpKey")).toBe(false);
+    expect((await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"))).headers.has("X-RateLimit-Count")).toBe(false);
+    process.env.PUUMERKKI_RATE_LIMIT_DEBUG = "1";
+    state.rateLimit.count = null;
+    expect((await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"))).headers.has("X-RateLimit-Count")).toBe(false);
+  } finally {
+    state.rateLimit = { response: null, count: 1 };
+    if (original === undefined) delete process.env.PUUMERKKI_RATE_LIMIT_DEBUG;
+    else process.env.PUUMERKKI_RATE_LIMIT_DEBUG = original;
+  }
 });

@@ -42,7 +42,7 @@ it("requires an authentication guard on every API route", () => {
     else if (name.startsWith("sign/")) {
       expect(source, name).toContain("eq(signingSession.token, token)");
       expect(source, name).toContain("s.expiresAt < new Date()");
-      expect(source.match(/await signRateLimit\(req, token\)/g)?.length, name).toBe(source.match(/export async function (GET|POST)/g)?.length);
+      expect(source.match(/await signRateLimit(?:WithCount)?\(req, token\)/g)?.length, name).toBe(source.match(/export async function (GET|POST)/g)?.length);
     } else {
       expect(source, name).toMatch(/await (getApiIdentity|getAgentIdentity)\(req/);
       if (name.startsWith("documents/[id]/")) expect(source, name).toMatch(/doc.ownerId/);

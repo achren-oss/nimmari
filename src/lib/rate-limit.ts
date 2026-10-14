@@ -1,56 +1,109 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
-import { db } from "@/db";
+import { client } from "@/db";
+import { clientIp } from "@/lib/client-ip";
+export { clientIp } from "@/lib/client-ip";
+
+type RateLimitResult = { response: Response | null; count: number | null };
 
 const WINDOW_MS = 60_000;
 
-/** Shared fixed windows. Only trust IP headers overwritten by a trusted proxy. */
+/** Shared fixed windows. Only trust IP headers overwritten by the deployment proxy. */
 export class FixedWindowLimiter {
-  constructor(private database = db) {}
+  constructor(private database: Pick<typeof client, "execute"> = client) {}
 
   async check(key: string, limit: number, now = Date.now()): Promise<Response | null> {
+    return (await this.checkWithCount(key, limit, now)).response;
+  }
+
+  async checkWithCount(key: string, limit: number, now = Date.now()): Promise<RateLimitResult> {
     const digest = createHash("sha256").update(key).digest("hex");
     const start = Math.floor(now / WINDOW_MS) * WINDOW_MS;
     try {
-      const bucket = await this.database.get<{ count: number; window_start: number }>(sql`
-        INSERT INTO rate_limit_bucket (key, window_start, count) VALUES (${digest}, ${start}, 1)
-        ON CONFLICT(key) DO UPDATE SET
-          count = CASE WHEN window_start < ${start} THEN 1 ELSE count + 1 END,
-          window_start = CASE WHEN window_start < ${start} THEN ${start} ELSE window_start END
-        RETURNING count, window_start
-      `);
-      if (Math.random() < 0.01) {
-        try {
-          await this.database.run(sql`DELETE FROM rate_limit_bucket WHERE window_start < ${start - WINDOW_MS}`);
-        } catch { console.error("Rate limit bucket cleanup failed"); }
-      }
-      if (bucket && bucket.count > limit) {
-        return Response.json({ error: "Too many requests" }, {
-          status: 429,
-          headers: { "Retry-After": String(Math.max(1, Math.ceil((bucket.window_start + WINDOW_MS - now) / 1000))) },
+      let result;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        result = await this.database.execute({
+          sql: `UPDATE rate_limit_bucket SET count = count + 1
+            WHERE key = ? AND window_start >= ? RETURNING count, window_start`,
+          args: [digest, start],
         });
+        if (result.rowsAffected > 0 || result.rows.length > 0) break;
+        // Reset expired windows atomically, without overwriting a concurrent reset.
+        result = await this.database.execute({
+          sql: `UPDATE rate_limit_bucket SET count = 1, window_start = ?
+            WHERE key = ? AND window_start < ? RETURNING count, window_start`,
+          args: [start, digest, start],
+        });
+        if (result.rowsAffected > 0 || result.rows.length > 0) break;
+        try {
+          result = await this.database.execute({
+            sql: "INSERT INTO rate_limit_bucket (key, window_start, count) VALUES (?, ?, 1) RETURNING count, window_start",
+            args: [digest, start],
+          });
+          break;
+        } catch (error) {
+          const code = (error as { code?: string } | null)?.code;
+          const uniqueConflict = code === "SQLITE_CONSTRAINT_UNIQUE" || code === "SQLITE_CONSTRAINT_PRIMARYKEY"
+            || (code === "SQLITE_CONSTRAINT" && error instanceof Error && /UNIQUE constraint failed/i.test(error.message));
+          if (!uniqueConflict || attempt === 2) throw error;
+          // Another writer created/reset the bucket; retry the atomic increment.
+        }
       }
-    } catch {
-      // Do not log database errors: they may contain request parameters.
-      console.error("Database rate limit check failed; allowing request");
+      const count = Number(result?.rows[0]?.count);
+      const windowStart = Number(result?.rows[0]?.window_start);
+      if (!Number.isSafeInteger(count) || count < 1 || !Number.isSafeInteger(windowStart)) {
+        throw new Error("Invalid rate limit bucket result");
+      }
+      if (Math.random() < 0.01) {
+        // Cleanup failure must not discard a successful limiting decision.
+        try {
+          await this.database.execute({
+            sql: "DELETE FROM rate_limit_bucket WHERE window_start < ?",
+            args: [start - WINDOW_MS],
+          });
+        } catch (error) { logFailure("Rate limit bucket cleanup failed", error, key, digest); }
+      }
+      const response = count > limit ? Response.json({ error: "Too many requests" }, {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(1, Math.ceil((windowStart + WINDOW_MS - now) / 1000))) },
+      }) : null;
+      return { response, count };
+    } catch (error) {
+      // Signing remains available during database failures. Never log keys or IPs.
+      logFailure("Database rate limit check failed; allowing request", error, key, digest);
+      return { response: null, count: null };
     }
-    return null;
   }
 }
 
+function logFailure(context: string, error: unknown, key: string, digest: string) {
+  // Drivers may include SQL arguments in messages; redact bucket identifiers.
+  const ip = key.startsWith("sign-ip:") ? key.slice(8) : key.startsWith("auth:") ? key.slice(5) : null;
+  const redact = (value: string) => [key, digest, ip].reduce<string>(
+    (message, secret) => secret ? message.split(secret).join("[redacted]") : message, value,
+  );
+  console.error(context, {
+    name: error instanceof Error ? redact(error.name) : "UnknownError",
+    message: redact(error instanceof Error ? error.message : String(error)),
+  });
+}
+
 const limiter = new FixedWindowLimiter();
-export function clientIp(req: Request) {
-  for (const header of ["x-vercel-forwarded-for", "x-real-ip", "x-forwarded-for"]) {
-    const ip = req.headers.get(header)?.split(",")[0].trim();
-    if (ip) return ip;
-  }
-  return "unknown";
-}
 export async function signRateLimit(req: Request, token: string): Promise<Response | null> {
-  const ipLimit = await limiter.check(`sign-ip:${clientIp(req)}`, 60);
-  if (ipLimit) return ipLimit;
-  return await limiter.check(`sign-token:${req.method === "POST" ? "write" : "read"}:${token}`, req.method === "POST" ? 20 : 60);
+  return (await signRateLimitWithCount(req, token)).response;
 }
+
+/** Count of the rejecting bucket, or the busiest successful signing bucket. Null on failure. */
+export async function signRateLimitWithCount(req: Request, token: string): Promise<RateLimitResult> {
+  const ipLimit = await limiter.checkWithCount(`sign-ip:${clientIp(req)}`, 60);
+  if (ipLimit.response) return ipLimit;
+  const tokenLimit = await limiter.checkWithCount(`sign-token:${req.method === "POST" ? "write" : "read"}:${token}`, req.method === "POST" ? 20 : 60);
+  if (tokenLimit.response) return tokenLimit;
+  return {
+    response: null,
+    count: ipLimit.count === null || tokenLimit.count === null ? null : Math.max(ipLimit.count, tokenLimit.count),
+  };
+}
+
 export async function bearerFailureRateLimit(req: Request): Promise<Response | null> {
   return await limiter.check(`auth:${clientIp(req)}`, 30);
 }

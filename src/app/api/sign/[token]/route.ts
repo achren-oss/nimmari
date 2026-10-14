@@ -1,3 +1,4 @@
+import { clientIp, rateLimitIpDebugHeaders } from "@/lib/client-ip";
 import { fieldMatchesSigner } from "@/lib/signer-assignment";
 import { writeTransaction } from "@/lib/write-transaction";
 import { rebuildSignedArtifact } from "@/lib/rebuild-signed-artifact";
@@ -9,7 +10,7 @@ import { db } from "@/db";
 import { document, field, signingSession, user } from "@/db/schema";
 import { fieldsVisibleToSigner } from "@/lib/field-visibility";
 import { isValidSignaturePng, validateAndNormalizeDate } from "@/lib/validators";
-import { signRateLimit } from "@/lib/rate-limit";
+import { signRateLimit, signRateLimitWithCount } from "@/lib/rate-limit";
 import { sendWebhook } from "@/lib/webhook";
 import { buildSignerFieldPayload } from "@/lib/signer-fields";
 import { sendSigningEmail } from "@/lib/email";
@@ -21,14 +22,6 @@ import { Resend } from "resend";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function clientIp(req: Request): string | null {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  const real = req.headers.get("x-real-ip");
-  if (real) return real.trim();
-  return null;
-}
-
 const Body = z.object({
   values: z.record(z.string(), z.string()),
   signaturePng: z.string().nullable(),
@@ -39,19 +32,26 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-  const limited = await signRateLimit(req, token);
-  if (limited) return limited;
+  const { response: limited, count } = await signRateLimitWithCount(req, token);
+  const withRateLimitCount = (response: Response) => {
+    if (process.env.PUUMERKKI_RATE_LIMIT_DEBUG === "1") {
+      for (const [name, value] of Object.entries(rateLimitIpDebugHeaders(req))) response.headers.set(name, value);
+      if (count !== null) response.headers.set("X-RateLimit-Count", String(count));
+    }
+    return response;
+  };
+  if (limited) return withRateLimitCount(limited);
   const [s] = await db.select().from(signingSession).where(eq(signingSession.token, token));
-  if (!s) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
+  if (!s) return withRateLimitCount(NextResponse.json({ error: "Invalid link" }, { status: 404 }));
   if (s.expiresAt < new Date()) {
-    return NextResponse.json({ error: "Link expired" }, { status: 410 });
+    return withRateLimitCount(NextResponse.json({ error: "Link expired" }, { status: 410 }));
   }
 
   const [doc] = await db.select().from(document).where(eq(document.id, s.documentId));
-  if (!doc) return NextResponse.json({ error: "Document missing" }, { status: 404 });
+  if (!doc) return withRateLimitCount(NextResponse.json({ error: "Document missing" }, { status: 404 }));
 
   const stopped = stoppedDocumentResponse(doc.status);
-  if (stopped) return stopped;
+  if (stopped) return withRateLimitCount(stopped);
 
   const fields = await db.select().from(field).where(eq(field.documentId, s.documentId));
   const payload =
@@ -63,7 +63,7 @@ export async function GET(
           value: f.prefilled ? f.value : null, prefilled: f.prefilled, readOnly: f.prefilled,
         }));
 
-  return NextResponse.json({
+  return withRateLimitCount(NextResponse.json({
     documentId: doc.id,
     kind: doc.kind,
     title: doc.title,
@@ -72,7 +72,7 @@ export async function GET(
     signerKey: s.signerKey,
     signedAt: s.signedAt?.toISOString() ?? null,
     fields: payload,
-  });
+  }));
 }
 
 export async function POST(

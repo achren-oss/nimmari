@@ -4,6 +4,8 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Image: ghcr.io/achren-oss/puumerkki](https://img.shields.io/badge/image-ghcr.io%2Fachren-oss%2Fpuumerkki-2496ED?logo=docker&logoColor=white)](https://github.com/achren-oss/puumerkki/pkgs/container/puumerkki)
 
+**AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)**
+
 > **Signatures:** Puumerkki produces eIDAS *Simple* Electronic Signatures (SES) only, not AdES/QES. See [Legal disclaimer](#legal-disclaimer).
 
 Self-hosted headless e-signatures. Your documents never leave your server.

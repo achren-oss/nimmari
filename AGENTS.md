@@ -1,5 +1,7 @@
 # Guidance for AI agents using Puumerkki
 
+Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md).
+
 This file is for AI agents (assistants, bots, automation) that use a
 Puumerkki instance's HTTP API for a person. For contributing to the code, see
 [CONTRIBUTING.md](CONTRIBUTING.md).

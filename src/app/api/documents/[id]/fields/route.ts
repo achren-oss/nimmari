@@ -41,8 +41,12 @@ export async function PUT(
         y: f.y,
         width: f.width,
         height: f.height,
+        name: f.name ?? null,
         label: f.label ?? null,
         required: f.required,
+        privateForOtherSigners: f.privateForOtherSigners,
+        assignedSignerKey: f.assignedSignerKey ?? null,
+        assignedToSignerEmail: f.assignedToSignerEmail ?? null,
       })),
     );
   }

@@ -29,7 +29,7 @@ DOC_ID=$(echo "$DOC_JSON" | python3 -c 'import sys,json;print(json.load(sys.stdi
 echo "==> create signing session"
 SEND_JSON=$(curl -fsS -b "$COOKIE_JAR" -X POST "$HOST/api/documents/$DOC_ID/send" \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"recipient-$TS@example.com\",\"name\":\"Recipient\"}")
+  -d "{\"email\":\"recipient-$TS@example.com\",\"name\":\"Recipient\",\"notify\":false}")
 echo "  $SEND_JSON"
 TOKEN=$(echo "$SEND_JSON" | python3 -c 'import sys,json;print(json.load(sys.stdin)["url"].rsplit("/",1)[-1])')
 

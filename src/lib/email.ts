@@ -59,3 +59,14 @@ function escapeHtml(s: string) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
 }
+
+export async function sendDeclinedEmail(args: { to: string; documentTitle: string; reason: string | null }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM;
+  if (!apiKey || !from) return;
+  try {
+    await new Resend(apiKey).emails.send({ from, to: args.to,
+      subject: `Document declined: "${args.documentTitle}"`,
+      html: `<p>${escapeHtml(args.documentTitle)} has been declined.</p>${args.reason ? `<p>${escapeHtml(args.reason)}</p>` : ""}` });
+  } catch (error) { console.error("Decline email failed", error); }
+}

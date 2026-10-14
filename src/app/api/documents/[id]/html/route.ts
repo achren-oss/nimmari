@@ -1,8 +1,10 @@
+import { stoppedDocumentResponse } from "@/lib/document-stop";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field, signingSession } from "@/db/schema";
 import { getApiIdentity } from "@/lib/api-auth";
+import { checkSigningTokenAccess } from "@/lib/token-access";
 import { fillHtml } from "@/lib/html-form";
 
 export async function GET(
@@ -27,7 +29,15 @@ export async function GET(
       .select()
       .from(signingSession)
       .where(eq(signingSession.token, signingToken));
-    allowed = !!s && s.documentId === docId;
+    const access = checkSigningTokenAccess(s, docId);
+    if (access === "expired") {
+      return NextResponse.json({ error: "Link expired" }, { status: 410 });
+    }
+    if (access === "ok") {
+      const stopped = stoppedDocumentResponse(doc.status);
+      if (stopped) return stopped;
+    }
+    allowed = access === "ok";
   } else {
     const identity = await getApiIdentity(req);
     allowed = !!identity && identity.userId === doc.ownerId;

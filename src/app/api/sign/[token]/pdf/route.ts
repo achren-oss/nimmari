@@ -1,7 +1,9 @@
+import { stoppedDocumentResponse } from "@/lib/document-stop";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { document, signingSession } from "@/db/schema";
+import { document, field, signingSession } from "@/db/schema";
+import { signedPdfForTokenViewer } from "@/lib/signer-view-pdf";
 import { renderHtmlToPdf } from "@/lib/render-pdf";
 
 import { signRateLimit } from "@/lib/rate-limit";
@@ -26,6 +28,11 @@ export async function GET(
   const [doc] = await db.select().from(document).where(eq(document.id, s.documentId));
   if (!doc) return NextResponse.json({ error: "Document missing" }, { status: 404 });
 
+  if (!s.signedAt) {
+    const stopped = stoppedDocumentResponse(doc.status);
+    if (stopped) return stopped;
+  }
+
   let pdfBlob = doc.signedPdf;
 
   // Fallback: if PDF wasn't cached at sign time (HTML render failed, or doc
@@ -37,7 +44,7 @@ export async function GET(
       await db
         .update(document)
         .set({ signedPdf: pdfBlob, updatedAt: new Date() })
-        .where(eq(document.id, doc.id));
+        .where(and(eq(document.id, doc.id), eq(document.version, doc.version)));
     } catch (e) {
       console.error("PDF on-demand render failed", e);
       return NextResponse.json({ error: "PDF not available" }, { status: 500 });
@@ -48,7 +55,24 @@ export async function GET(
     return NextResponse.json({ error: "PDF not available yet" }, { status: 404 });
   }
 
-  const bytes = pdfBlob instanceof Uint8Array ? pdfBlob : Buffer.from(pdfBlob as ArrayBuffer);
+  let bytes: Uint8Array = pdfBlob instanceof Uint8Array ? pdfBlob : Buffer.from(pdfBlob as ArrayBuffer);
+
+  const fields = await db.select().from(field).where(eq(field.documentId, doc.id));
+  const sessions = await db
+    .select()
+    .from(signingSession)
+    .where(eq(signingSession.documentId, doc.id));
+  bytes = await signedPdfForTokenViewer({
+    kind: doc.kind,
+    status: doc.status,
+    originalPdf: doc.pdf ? (doc.pdf instanceof Uint8Array ? doc.pdf : Buffer.from(doc.pdf as ArrayBuffer)) : null,
+    signedPdf: bytes,
+    fields,
+    signedSessions: sessions.filter((x) => x.signedAt),
+    viewerKey: s.signerKey,
+    viewerEmail: s.recipientEmail,
+  });
+
   const safeTitle = doc.title.replace(/[^\w\-. ]+/g, "_");
   return new NextResponse(bytes as BodyInit, {
     headers: {

@@ -1,36 +1,43 @@
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { PDFDocument, PDFName, PDFNumber, rgb, StandardFonts } from "pdf-lib";
 
-import { layoutMultiline } from "./wrap-text";
+import { PDF_OVERLAY_WIDTH } from "./pdf-coords";
+import { maskHetu } from "./hetu";
+import { formatDateFinnish } from "./validators";
+import type { AuditDocumentMeta, SealedSigner } from "./audit-footer";
+import { formatAuditTimestamp } from "./audit-timezone";
+import { drawTextInBox } from "./draw-text-in-box";
+import type { PdfFieldBox } from "./pdf-field-extents";
+import { lowestContentBottomOnPage } from "./pdf-field-extents";
+import { pdfAuditText } from "./pdf-audit-text";
 
 type StampField = {
-  type: "text" | "textarea" | "checkbox" | "signature";
+  type: "text" | "textarea" | "checkbox" | "signature" | "date" | "hetu";
   page: number;
   x: number;
   y: number;
   width: number;
   height: number;
   value: string | null;
+  maskValue?: boolean;
 };
 
-type AuditLine = {
-  documentId: string;
-  contentHashShort: string;
-  signedAt: Date;
-  recipientEmail: string;
-};
+const RENDER_WIDTH = PDF_OVERLAY_WIDTH;
+const PDF_AUDIT_BAND_PT = 72;
+const AUDIT_SIDE_MARGIN = 24;
+const AUDIT_CONTENT_GAP = 8;
+const LEGACY_SEAL_SUBJECT_PREFIX = "puumerkki:sealPage=";
+const CATALOG_SEAL_PAGE = PDFName.of("PuumerkkiSealPage");
 
-const RENDER_WIDTH = 800;
+const ink = rgb(0.05, 0.1, 0.2);
 
 export async function stampPdf({
   pdfBytes,
   fields,
   signaturePng,
-  audit,
 }: {
   pdfBytes: Uint8Array;
   fields: StampField[];
   signaturePng: string | null;
-  audit?: AuditLine;
 }) {
   const pdf = await PDFDocument.load(pdfBytes);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -57,29 +64,14 @@ export async function stampPdf({
     const y = ph - yTop - h;
 
     if (f.type === "text" && f.value) {
-      const fontSize = Math.min(h * 0.6, 14);
-      page.drawText(f.value, {
-        x: x + 4,
-        y: y + (h - fontSize) / 2,
-        size: fontSize,
-        font,
-        color: rgb(0.05, 0.1, 0.2),
-      });
+      drawTextInBox(page, font, f.value, x, y, w, h, ink);
+    } else if (f.type === "date" && f.value) {
+      drawTextInBox(page, font, formatDateFinnish(f.value), x, y, w, h, ink);
+    } else if (f.type === "hetu" && f.value) {
+      const displayValue = f.maskValue ? maskHetu(f.value) : f.value;
+      drawTextInBox(page, font, displayValue, x, y, w, h, ink);
     } else if (f.type === "textarea" && f.value) {
-      const lineHeight = 1.2;
-      const layout = layoutMultiline(f.value, font, w - 8, h - 8, {
-        fontSize: 12, minFontSize: 6, lineHeight,
-      });
-      layout.lines.forEach((line, index) => {
-        if (!line) return;
-        page.drawText(line, {
-          x: x + 4,
-          y: y + h - 4 - layout.fontSize - index * layout.fontSize * lineHeight,
-          size: layout.fontSize,
-          font,
-          color: rgb(0.05, 0.1, 0.2),
-        });
-      });
+      drawTextInBox(page, font, f.value, x, y, w, h, ink);
     } else if (f.type === "checkbox") {
       page.drawRectangle({
         x,
@@ -122,29 +114,167 @@ export async function stampPdf({
     }
   }
 
-  if (audit) {
-    const lastPage = pages[pages.length - 1];
-    if (lastPage) {
-      const { width: pw } = lastPage.getSize();
-      const dt = audit.signedAt.toISOString().replace("T", " ").slice(0, 16) + " UTC";
-      const line = `Sealed by ${audit.recipientEmail} on ${dt}  ·  Doc ${audit.documentId}  ·  SHA-256 ${audit.contentHashShort}`;
-      const fontSize = 7;
-      const margin = 24;
-      lastPage.drawLine({
-        start: { x: margin, y: margin + 14 },
-        end: { x: pw - margin, y: margin + 14 },
-        thickness: 0.5,
-        color: rgb(0.59, 0.53, 0.42),
-      });
-      lastPage.drawText(line, {
-        x: margin,
-        y: margin + 4,
-        size: fontSize,
-        font,
-        color: rgb(0.35, 0.29, 0.19),
-      });
-    }
+  return await pdf.save();
+}
+
+function readCatalogSealPageIndex(pdf: PDFDocument): number | null {
+  const raw = pdf.catalog.get(CATALOG_SEAL_PAGE);
+  if (!raw || typeof raw !== "object" || !("asNumber" in raw)) return null;
+  const n = (raw as PDFNumber).asNumber();
+  return Number.isFinite(n) ? n : null;
+}
+
+function writeCatalogSealPageIndex(pdf: PDFDocument, pageIndex: number | null): void {
+  if (pageIndex === null) {
+    pdf.catalog.delete(CATALOG_SEAL_PAGE);
+    return;
   }
+  pdf.catalog.set(CATALOG_SEAL_PAGE, PDFNumber.of(pageIndex));
+}
+
+function readLegacySubjectSealPageIndex(subject: string | undefined): number | null {
+  if (!subject?.startsWith(LEGACY_SEAL_SUBJECT_PREFIX)) return null;
+  const n = Number.parseInt(subject.slice(LEGACY_SEAL_SUBJECT_PREFIX.length), 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function clearLegacySealSubject(pdf: PDFDocument): void {
+  const subject = pdf.getSubject();
+  if (subject?.startsWith(LEGACY_SEAL_SUBJECT_PREFIX)) {
+    pdf.setSubject("");
+  }
+}
+
+/** Marked dedicated seal page index, if the last page is the seal. */
+function markedSealPageIndex(pdf: PDFDocument): number | null {
+  const pageCount = pdf.getPageCount();
+  if (pageCount < 2) return null;
+  const last = pageCount - 1;
+  const catalogIdx = readCatalogSealPageIndex(pdf);
+  const legacyIdx = readLegacySubjectSealPageIndex(pdf.getSubject());
+  const marked = catalogIdx ?? legacyIdx;
+  if (marked === null || marked <= 0 || marked !== last) return null;
+  return last;
+}
+
+/** Remove the old seal page entirely so audit text is not left in the content stream. */
+function removeMarkedSealPage(pdf: PDFDocument): void {
+  const idx = markedSealPageIndex(pdf);
+  if (idx === null || idx <= 0) {
+    clearLegacySealSubject(pdf);
+    return;
+  }
+  pdf.removePage(idx);
+  writeCatalogSealPageIndex(pdf, null);
+  clearLegacySealSubject(pdf);
+}
+
+export function pdfAuditBandHeightPt(signerCount: number): number {
+  const lineHeight = 9;
+  return PDF_AUDIT_BAND_PT + signerCount * lineHeight;
+}
+
+export type PdfAuditOptions = {
+  /** When true, always use a dedicated seal page (multi-signer documents). */
+  multiSignerDocument?: boolean;
+};
+
+/** Replace the bottom audit band with one combined block for all signers. */
+export async function applyCombinedPdfAudit(
+  pdfBytes: Uint8Array,
+  signers: SealedSigner[],
+  meta: AuditDocumentMeta,
+  stampedBoxes: PdfFieldBox[] = [],
+  options: PdfAuditOptions = {},
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.load(pdfBytes);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const timeZone = meta.auditTimezone;
+
+  clearLegacySealSubject(pdf);
+  removeMarkedSealPage(pdf);
+
+  let pages = pdf.getPages();
+  if (pages.length === 0) {
+    pdf.addPage([595, 842]);
+    pages = pdf.getPages();
+  }
+
+  const contentPageIndex = pdf.getPageCount() - 1;
+  const contentPage = pdf.getPages()[contentPageIndex]!;
+  const { width: pw, height: ph } = contentPage.getSize();
+  const lineHeight = 9;
+  const bandHeight = pdfAuditBandHeightPt(signers.length);
+  const auditTop = bandHeight + AUDIT_SIDE_MARGIN;
+
+  const contentBottom = lowestContentBottomOnPage(
+    stampedBoxes,
+    contentPageIndex,
+    pw,
+    ph,
+  );
+  const useDedicatedSealPage =
+    options.multiSignerDocument === true ||
+    (contentBottom !== null && contentBottom < auditTop + AUDIT_CONTENT_GAP);
+
+  let auditPage = contentPage;
+
+  if (useDedicatedSealPage) {
+    auditPage = pdf.addPage([pw, ph]);
+    writeCatalogSealPageIndex(pdf, pdf.getPageCount() - 1);
+  } else {
+    writeCatalogSealPageIndex(pdf, null);
+    // Inline audit only: clear the bottom band on the content page, then draw there.
+    contentPage.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pw,
+      height: auditTop,
+      color: rgb(1, 1, 1),
+    });
+  }
+
+  const margin = AUDIT_SIDE_MARGIN;
+  let y = bandHeight;
+  auditPage.drawLine({
+    start: { x: margin, y },
+    end: { x: pw - margin, y },
+    thickness: 0.5,
+    color: rgb(0.59, 0.53, 0.42),
+  });
+  y -= 10;
+  auditPage.drawText(pdfAuditText("Sealed"), {
+    x: margin,
+    y: y - 2,
+    size: 8,
+    font,
+    color: rgb(0.29, 0.42, 0.24),
+  });
+  y -= lineHeight;
+  for (const s of signers) {
+    const line = pdfAuditText(
+      `${s.email}  -  ${formatAuditTimestamp(s.signedAt, timeZone ?? "")}`,
+    );
+    auditPage.drawText(line, {
+      x: margin,
+      y: y - 2,
+      size: 7,
+      font,
+      color: rgb(0.35, 0.29, 0.19),
+    });
+    y -= lineHeight;
+  }
+  const metaLine = pdfAuditText(
+    `Doc ${meta.documentId}  -  SHA-256 ${meta.contentHashShort}`,
+  );
+  auditPage.drawText(metaLine, {
+    x: margin,
+    y: margin + 2,
+    size: 7,
+    font,
+    color: rgb(0.35, 0.29, 0.19),
+  });
 
   return await pdf.save();
 }

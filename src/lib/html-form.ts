@@ -1,11 +1,16 @@
+import { fieldMatchesSigner, type FieldAssignment, type SignerIdentity } from "./signer-assignment";
 import sanitizeHtml from "sanitize-html";
 import * as cheerio from "cheerio";
+import { formatDateFinnish } from "./validators";
 
 export type HtmlField = {
   name: string;
   label: string;
-  type: "text" | "checkbox" | "radio" | "signature";
+  type: "text" | "checkbox" | "radio" | "signature" | "date" | "hetu";
   required: boolean;
+  assignedSignerKey: string | null;
+  assignedToSignerEmail: string | null;
+  privateForOtherSigners: boolean;
 };
 
 const COMMON_ATTRS = [
@@ -14,6 +19,7 @@ const COMMON_ATTRS = [
   "checked", "disabled", "readonly",
   "min", "max", "step", "pattern", "minlength", "maxlength", "required",
   "data-pm-form", "data-pm-field", "data-pm-label", "data-pm-required", "data-pm-type",
+  "data-pm-signer", "data-pm-signer-key", "data-pm-role", "data-pm-private",
 ];
 
 const SVG_PRESENTATION_ATTRS = [
@@ -146,6 +152,10 @@ export function extractFields(html: string): HtmlField[] {
     let type: HtmlField["type"] = "text";
     if (explicitType === "signature" || $el.hasClass("pm-signature")) {
       type = "signature";
+    } else if (explicitType === "date" || inputType === "date") {
+      type = "date";
+    } else if (explicitType === "hetu" || $el.hasClass("pm-hetu")) {
+      type = "hetu";
     } else if (tag === "input" && inputType === "checkbox") {
       type = "checkbox";
     } else if (tag === "fieldset") {
@@ -156,7 +166,19 @@ export function extractFields(html: string): HtmlField[] {
       type = "signature";
     }
 
-    fields.push({ name, label, type, required });
+    const signerRaw = ($el.attr("data-pm-signer") ?? "").trim().toLowerCase();
+    const assignedToSignerEmail = signerRaw && signerRaw.includes("@") ? signerRaw : null;
+    const privateForOtherSigners = $el.attr("data-pm-private") !== undefined;
+
+    fields.push({
+      name,
+      label,
+      type,
+      required,
+      assignedToSignerEmail,
+      assignedSignerKey: ($el.attr("data-pm-signer-key") ?? $el.attr("data-pm-role"))?.trim() || null,
+      privateForOtherSigners,
+    });
   });
 
   return fields;
@@ -217,10 +239,26 @@ export type AuditMeta = {
   contentHashShort: string; // already shortened (e.g. "7e2af1c9…b40c")
   signedAt: Date;
   recipientEmail: string;
+  // For multi-signer docs: how many signers have already sealed this doc
+  // (used to append audit lines instead of replacing them).
+  existingSignerCount?: number;
 };
 
 export function appendAuditFooter(html: string, audit: AuditMeta): string {
   const dt = audit.signedAt.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const existingCount = audit.existingSignerCount ?? 0;
+
+  // If this is not the first signer, append to existing audit section.
+  if (existingCount > 0 && html.includes("data-pm-audit")) {
+    // Find the audit section and append a new line to it
+    const auditLine = `<br><span class="seal-mark">&#10003; Sealed</span> by ${escapeHtml(audit.recipientEmail)} on ${dt}`;
+    const auditSectionEnd = html.lastIndexOf("</section>");
+    if (auditSectionEnd > 0 && html.substring(Math.max(0, auditSectionEnd - 200), auditSectionEnd).includes("data-pm-audit")) {
+      return html.substring(0, auditSectionEnd) + auditLine + "\n" + html.substring(auditSectionEnd);
+    }
+  }
+
+  // First signer or fallback: create a new audit section
   const footer = `
 <style>
   .pm-audit{margin-top:32px;padding-top:14px;border-top:1px solid #97876a;font-family:'Helvetica Neue',Arial,sans-serif;font-size:10px;line-height:1.6;color:#5a4a31;}
@@ -269,10 +307,11 @@ export function fillHtml(
     let didFill = false;
 
     if (isSignature) {
-      if (signaturePng) {
+      const sig = (name && values[name]?.startsWith("data:image/")) ? values[name] : signaturePng;
+      if (sig) {
         $el.empty();
         $el.append(
-          `<img alt="Signature" src="${escapeHtml(signaturePng)}" style="max-width:100%;max-height:100%;height:auto;display:block;" />`,
+          `<img alt="Signature" src="${escapeHtml(sig)}" style="max-width:100%;max-height:100%;height:auto;display:block;" />`,
         );
         $el.addClass("has-signature");
       }
@@ -311,7 +350,14 @@ export function fillHtml(
       }
     } else if (tag === "input") {
       if (v !== undefined) {
-        $el.attr("value", v);
+        let display = v;
+        const pmType = ($el.attr("data-pm-type") ?? "").trim().toLowerCase();
+        if (pmType === "date" || inputType === "date") {
+          display = formatDateFinnish(v);
+        } else if (pmType === "hetu" || $el.hasClass("pm-hetu")) {
+          display = v;
+        }
+        $el.attr("value", display);
         didFill = !!v;
       }
     }
@@ -331,5 +377,20 @@ export function fillHtml(
     });
   }
 
+  return $.html();
+}
+
+/** Remove other slots' controls, including their source values, before sending HTML to a signer. */
+export function htmlVisibleToSigner(
+  html: string,
+  fields: (FieldAssignment & { name: string | null })[],
+  signer: SignerIdentity,
+): string {
+  const hiddenNames = new Set(fields.filter((f) => !fieldMatchesSigner(f, signer)).map((f) => f.name));
+  if (!hiddenNames.size) return html;
+  const $ = cheerio.load(html);
+  $("[data-pm-field]").each((_, el) => {
+    if (hiddenNames.has($(el).attr("data-pm-field") ?? null)) $(el).remove();
+  });
   return $.html();
 }

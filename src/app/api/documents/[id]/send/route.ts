@@ -1,11 +1,17 @@
+import { writeTransaction } from "@/lib/write-transaction";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field, signingSession, user } from "@/db/schema";
 import { getApiIdentity } from "@/lib/api-auth";
 import { id, token } from "@/lib/ids";
 import { sendSigningEmail } from "@/lib/email";
-import { LINK_ONLY_NOTE, SendBody } from "@/lib/send-options";
+import { SendBody } from "@/lib/send-options";
+import { resolveEffectiveNotify } from "@/lib/notify";
+import {
+  resolveSignerEmailNote,
+  shouldInviteOnSend,
+} from "@/lib/sequential-invites";
 
 export async function POST(
   req: Request,
@@ -20,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (doc.status === "completed") {
+  if (doc.status === "completed" || doc.status === "cancelled" || doc.status === "declined") {
     return NextResponse.json({ error: "Document cannot be sent" }, { status: 409 });
   }
 
@@ -35,53 +41,111 @@ export async function POST(
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const sessionId = id("ss");
-  const t = token();
+  // Determine signers list: either single signer or multiple signers
+  const signers = parsed.data.signers?.length
+    ? parsed.data.signers
+    : [{ email: parsed.data.email!, name: parsed.data.name, order: null, key: undefined }];
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const [owner] = await db.select().from(user).where(eq(user.id, identity.userId));
+  const effectiveNotify = resolveEffectiveNotify(doc.notify, parsed.data.notify);
 
-  await db.insert(signingSession).values({
-    id: sessionId,
-    documentId: docId,
-    recipientEmail: parsed.data.email,
-    recipientName: parsed.data.name ?? null,
-    token: t,
-    expiresAt,
-    createdAt: now,
+  const results: Array<{
+    key: string;
+    email: string;
+    name: string | null;
+    url: string;
+    signingSessionId: string;
+    order: number | null;
+    emailSent: boolean;
+    emailNote?: string;
+  }> = [];
+
+  const created = await writeTransaction(async (tx) => {
+    const locked = await tx.update(document).set({ version: sql`${document.version} + 1`, updatedAt: now })
+      .where(and(eq(document.id, docId), sql`${document.status} in ('draft', 'sent')`)).returning();
+    if (!locked.length) return { error: "Document cannot be sent", status: 409 };
+    const existing = await tx.select().from(signingSession).where(eq(signingSession.documentId, docId));
+    if (existing.some((s) => s.signedAt)) return { error: "Signing has already started; signers cannot be added.", status: 409 };
+    if (existing.length + signers.length > 1 && fields.some((f) => f.type === "signature" && !f.assignedToSignerEmail && !f.assignedSignerKey)) {
+      return { error: "Assign each signature field to a signer key or email for multi-signer documents.", status: 400 };
+    }
+    const emails = [...existing.map((s) => s.recipientEmail), ...signers.map((s) => s.email)].map((email) => email.toLowerCase());
+    const duplicates = new Set(emails.filter((email, index) => emails.indexOf(email) !== index));
+    if (fields.some((f) => !f.assignedSignerKey && f.assignedToSignerEmail && duplicates.has(f.assignedToSignerEmail.toLowerCase()))) {
+      return { error: "Duplicate signer emails require keys/roles: assign fields with assignedSignerKey and give each signer a unique key.", status: 400 };
+    }
+    const keys = signers.map((signer, index) => signer.key ?? `signer-${existing.length + index}`);
+    const allKeys = [...existing.map((s) => s.signerKey).filter(Boolean), ...keys];
+    if (new Set(allKeys).size !== allKeys.length) return { error: "Signer keys must be unique within the document.", status: 400 };
+    const sessions = signers.map((signer, index) => ({
+      signerKey: keys[index],
+      id: id("ss"), documentId: docId, recipientEmail: signer.email, recipientName: signer.name ?? null,
+      token: token(), expiresAt, createdAt: now, signerOrder: signer.order ?? null, inviteEmailEnabled: effectiveNotify,
+    }));
+    await tx.insert(signingSession).values(sessions);
+    await tx.update(document).set({ status: "sent" }).where(eq(document.id, docId));
+    return { sessions };
   });
+  if (created.error) return NextResponse.json({ error: created.error }, { status: created.status });
+  for (const [index, signer] of signers.entries()) {
+    const sessionId = created.sessions![index].id;
+    const t = created.sessions![index].token;
 
-  if (doc.status === "draft") {
-    await db.update(document).set({ status: "sent", updatedAt: now }).where(eq(document.id, docId));
-  }
+    const url = `${process.env.APP_URL ?? "http://localhost:3000"}/sign/${t}`;
+    const invitedNow = shouldInviteOnSend(
+      { email: signer.email, name: signer.name, order: signer.order ?? null },
+      signers.map((s) => ({ email: s.email, name: s.name, order: s.order ?? null })),
+    );
 
-  const url = `${process.env.APP_URL ?? "http://localhost:3000"}/sign/${t}`;
+    let emailSent = false;
+    let emailNoteFromProvider: string | undefined;
+    if (effectiveNotify && invitedNow) {
+      const emailResult = await sendSigningEmail({
+        to: signer.email,
+        recipientName: signer.name,
+        senderName: parsed.data.senderName ?? owner?.name ?? "Puumerkki",
+        documentTitle: doc.title,
+        url,
+        signingSessionId: sessionId,
+      });
+      emailSent = emailResult.sent;
+      emailNoteFromProvider = emailResult.note;
+    }
 
-  if (!parsed.data.notify) {
-    return NextResponse.json({
+    results.push({
+      key: created.sessions![index].signerKey,
+      email: signer.email,
+      name: signer.name ?? null,
       url,
       signingSessionId: sessionId,
-      expiresAt: expiresAt.toISOString(),
-      emailSent: false,
-      emailNote: LINK_ONLY_NOTE,
+      order: signer.order ?? null,
+      emailSent,
+      emailNote: resolveSignerEmailNote({
+        effectiveNotify,
+        invitedNow,
+        emailSent,
+        emailNoteFromProvider,
+      }),
     });
   }
 
-  const [owner] = await db.select().from(user).where(eq(user.id, identity.userId));
+  // Backwards compatible response for single signer
+  if (signers.length === 1) {
+    return NextResponse.json({
+      key: results[0].key,
+      url: results[0].url,
+      signingSessionId: results[0].signingSessionId,
+      expiresAt: expiresAt.toISOString(),
+      emailSent: results[0].emailSent,
+      emailNote: results[0].emailNote,
+    });
+  }
 
-  const emailResult = await sendSigningEmail({
-    to: parsed.data.email,
-    recipientName: parsed.data.name,
-    senderName: parsed.data.senderName ?? owner?.name ?? "Puumerkki",
-    documentTitle: doc.title,
-    url,
-    signingSessionId: sessionId,
-  });
-
+  // Multi-signer response
   return NextResponse.json({
-    url,
-    signingSessionId: sessionId,
+    signers: results,
     expiresAt: expiresAt.toISOString(),
-    emailSent: emailResult.sent,
-    emailNote: emailResult.note,
   });
 }

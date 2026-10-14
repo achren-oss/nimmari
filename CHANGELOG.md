@@ -5,6 +5,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ## [Unreleased]
 
 ### Added
+- Admin/root account listing and safe deletion with owner/document protection and transactional credential cleanup. Apply journaled `0006_account_disabled.sql` before deployment.
 - Admin account provisioning and scoped, hashed API keys with metadata listing, revocation, and best-effort usage tracking.
 - Idempotent `0005_api_keys.sql` registered in the migration journal, authentication tests, and bootstrap documentation.
 - AcroForm field import, date fields, unvalidated personal identity (`hetu`) fields, and signer-slot keys supporting multiple roles with the same email.
@@ -15,6 +16,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Production regression tests and a separate OpenAPI contract for the implemented API.
 
 ### Changed
+- Disabled accounts cannot log in; existing server sessions are ignored.
 - Disable public signup and implicit provider account creation; preserve password login and signer links.
 - Treat `PUUMERKKI_API_KEY` as root/admin, allowing account/key bootstrap without a document owner. Database keys remain scoped to their owner's documents.
 - Prefill accepts owner bearer authentication and merges by default, with explicit replace/clear modes.

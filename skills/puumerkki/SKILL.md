@@ -257,3 +257,23 @@ notification setting. No helper retries mutations automatically.
 - Read exact event schemas in the reference; the payload has no signer URLs.
 - Do not assume retry delivery: the server makes one attempt with a 10-second timeout.
 - Reconcile events against owner GET responses; an HMAC alone supplies no replay protection.
+
+### Account administration
+
+`GET /api/accounts` requires an admin or root key and returns
+`{accounts:[{id,email,name,createdAt,disabled}]}` sorted by creation time (oldest
+first). `?email=...` filters by exact email after trimming and lowercasing.
+Timestamps are ISO strings. `disabled` means `user.disabled_at` is non-null;
+disabled accounts cannot log in and their existing server sessions are ignored.
+
+`DELETE /api/accounts/{id}` requires an admin or root key. Unknown IDs return
+404. The configured `PUUMERKKI_API_OWNER_ID`, the caller's own key owner, and
+accounts owning any documents return 409 with `{error}`. Documents are never
+deleted. Success returns `{ok:true,id}` after one transaction revokes the owner's
+keys, deletes sessions and credentials, and deletes the user. Revoked key rows
+then cascade with the user. Missing/invalid keys return 401; regular keys and
+session authentication return 403 for both operations.
+
+Apply `drizzle/0006_account_disabled.sql` before deploying with
+`node --env-file=.env.local scripts/migrate.mjs`. The migration is registered in
+the Drizzle journal and runs once. This adds no public account-disable endpoint.

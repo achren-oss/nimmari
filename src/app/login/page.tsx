@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 
 export default function LoginPage() {
@@ -60,12 +59,6 @@ export default function LoginPage() {
         <button type="submit" disabled={loading} className="btn-primary big">
           {loading ? "Signing in..." : "Sign in"} <span className="arr">→</span>
         </button>
-        <p style={{ textAlign: "center", color: "var(--ink-soft)", fontStyle: "italic", fontSize: 14 }}>
-          No account?{" "}
-          <Link href="/signup" style={{ color: "var(--ink)", borderBottom: "1px solid var(--rule)", paddingBottom: 1 }}>
-            Sign up
-          </Link>
-        </p>
       </form>
     </main>
   );

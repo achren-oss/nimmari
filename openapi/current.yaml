@@ -2,8 +2,11 @@ openapi: 3.1.0
 info:
   title: Puumerkki implemented API
   version: 1.0.0+unreleased
-  description: Implemented unversioned routes. Shared owner bearer key or Better Auth
-    session; signer tokens are secret capabilities. SES drawn signatures only. Proposed
+  description: Implemented unversioned routes. Owner-scoped database bearer keys or Better Auth
+    sessions for documents. Account/key management requires bearer keys; root/admin can
+    provision accounts. Public signup is disabled. Root PUUMERKKI_API_KEY can bootstrap
+    without PUUMERKKI_API_OWNER_ID, but root document requests require that owner.
+    Admin database keys access only their owner's documents; signer tokens are secret capabilities. SES drawn signatures only. Proposed
     /v1 routes are documented separately in v1.yaml.
   license:
     name: AGPL-3.0-only
@@ -15,6 +18,304 @@ security:
 - ownerBearer: []
 - ownerSession: []
 paths:
+  /api/accounts:
+    post:
+      summary: Provision an account (admin/root only)
+      description: Email is trimmed and lowercased. Omit password to generate one
+        returned only in this response. Password limits follow Better Auth.
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - email
+                  - name
+                properties:
+                  id:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+                  name:
+                    type: string
+                  password:
+                    type: string
+                    description: Generated password, present only if omitted from request; returned once.
+        '400':
+          description: Invalid input or missing root owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Duplicate account email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 5000
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+      security:
+        - ownerBearer: []
+      operationId: postApiAccounts
+  /api/keys:
+    post:
+      summary: Create an API key
+      description: Scope defaults to regular and ownerUserId to the caller's owner.
+        Ownerless root must supply ownerUserId. Regular callers can create only
+        regular keys for their own owner; root/admin can create either scope for
+        any existing owner. All database keys access only their owner's documents.
+        Store the returned plaintext key securely; it is returned only once.
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - name
+                  - scope
+                  - ownerUserId
+                  - prefix
+                  - createdAt
+                  - key
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  scope:
+                    type: string
+                    enum:
+                      - admin
+                      - regular
+                  ownerUserId:
+                    type: string
+                  prefix:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+                  key:
+                    type: string
+                    description: Plaintext secret returned once; store securely.
+        '400':
+          description: Invalid input or missing root owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Owner/key missing or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                scope:
+                  type: string
+                  enum:
+                    - admin
+                    - regular
+                  default: regular
+                ownerUserId:
+                  type: string
+                  minLength: 1
+      security:
+        - ownerBearer: []
+      operationId: postApiKeys
+    get:
+      summary: List key metadata
+      description: >-
+        Admin/root sees all keys, optionally filtered by ownerUserId. Regular sees own keys regardless
+        of query filter. Includes revoked keys. No hashes or plaintext.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - keys
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+        '401':
+          description: Missing, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        - name: ownerUserId
+          in: query
+          schema:
+            type: string
+      security:
+        - ownerBearer: []
+      operationId: getApiKeys
+  /api/keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Revoke a key
+      description: >-
+        Regular callers may revoke only their own keys. Admin/root may revoke any key. Repeated
+        revocation is safe.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+        '401':
+          description: Missing, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Owner/key missing or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - ownerBearer: []
+      operationId: deleteApiKeysKeyId
+  /api/keys/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Revoke a key
+      description: >-
+        Regular callers may revoke only their own keys. Admin/root may revoke any key. Repeated
+        revocation is safe.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+        '401':
+          description: Missing, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient scope or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Owner/key missing or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - ownerBearer: []
+      operationId: postApiKeysKeyIdRevoke
   /api/documents:
     post:
       operationId: postApiDocuments
@@ -788,10 +1089,11 @@ paths:
 components:
   securitySchemes:
     ownerBearer:
+      description: Server root PUUMERKKI_API_KEY or active owner-scoped database key.
+        Root document requests require PUUMERKKI_API_OWNER_ID. Invalid bearer
+        credentials never fall back to session cookies.
       type: http
       scheme: bearer
-      description: PUUMERKKI_API_KEY mapped to PUUMERKKI_API_OWNER_ID; invalid bearer
-        headers do not fall back to session auth.
     ownerSession:
       type: apiKey
       in: cookie
@@ -804,6 +1106,42 @@ components:
       name: t
       description: Unexpired signing token associated with this document.
   schemas:
+    ApiKey:
+      type: object
+      required:
+        - id
+        - name
+        - scope
+        - ownerUserId
+        - prefix
+        - createdAt
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        scope:
+          type: string
+          enum:
+            - admin
+            - regular
+        ownerUserId:
+          type: string
+        prefix:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        revokedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
     Error:
       type: object
       properties:

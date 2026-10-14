@@ -1,30 +1,39 @@
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { apiKey } from "@/db/schema";
 import { getServerSession } from "@/lib/session";
-
-const API_KEY = process.env.PUUMERKKI_API_KEY;
-const API_OWNER_USER_ID = process.env.PUUMERKKI_API_OWNER_ID;
+import { hashApiKey, matchesRootKey } from "@/lib/api-keys";
 
 export interface ApiIdentity {
   userId: string;
-  via: "session" | "bot";
+  scope?: "admin" | "regular";
+  keyId?: string;
+  via: "session" | "root" | "key";
 }
 
-/**
- * Resolves the caller's identity for API routes: either a logged-in web
- * session, or a service account API key supplied as a bearer token
- * mapped to a fixed service-account owner. A bearer header that doesn't
- * match the configured key is rejected outright -- it does not fall
- * through to session auth.
- */
-export async function getApiIdentity(req: Request): Promise<ApiIdentity | null> {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const key = authHeader.slice("Bearer ".length).trim();
-    if (API_KEY && API_OWNER_USER_ID && key === API_KEY) {
-      return { userId: API_OWNER_USER_ID, via: "bot" };
+/** Bearer failures never fall through to cookies. Ownerless roots are admin-only. */
+export async function getApiIdentity(req: Request, options: { allowOwnerlessRoot?: boolean } = {}): Promise<ApiIdentity | null> {
+  const header = req.headers.get("authorization");
+  if (header !== null) {
+    const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+    if (!match) return null;
+    const key = match[1];
+    if (matchesRootKey(key)) {
+      const userId = process.env.PUUMERKKI_API_OWNER_ID || "";
+      return userId || options.allowOwnerlessRoot ? { userId, scope: "admin", via: "root" } : null;
     }
-    return null;
+    const row = await db.query.apiKey.findFirst({ where: and(eq(apiKey.keyHash, hashApiKey(key)), isNull(apiKey.revokedAt)) });
+    if (!row) return null;
+    try { await db.update(apiKey).set({ lastUsedAt: new Date() }).where(eq(apiKey.id, row.id)); } catch { /* Usage tracking must not prevent authentication. */ }
+    return { userId: row.ownerUserId, scope: row.scope, keyId: row.id, via: "key" };
   }
   const session = await getServerSession();
-  if (session?.user) return { userId: session.user.id, via: "session" };
-  return null;
+  return session?.user ? { userId: session.user.id, scope: "regular", via: "session" } : null;
+}
+
+export async function getAgentIdentity(req: Request) {
+  const identity = await getApiIdentity(req, { allowOwnerlessRoot: true });
+  if (!identity) return { error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
+  if (identity.via === "session") return { error: Response.json({ error: "API key required" }, { status: 403 }) };
+  return { identity };
 }

@@ -56,7 +56,7 @@ Measured 7.10.2026 (Frankfurt, 0.1 CPU / 512 MB, Turso Ireland): signing an HTML
 4. **Deploy and check health:** `https://<your-service>.onrender.com/api/health`
    should return `{"status":"ok"}`.
 
-5. **Create your account** at `/signup`, upload a document and send a test link.
+5. **Provision your account** using the root `PUUMERKKI_API_KEY` and [admin API bootstrap](../README.md#create-an-api-key-for-an-ai-agent), then log in at `/login`, upload a document and send a test link. Public signup is disabled.
 
 6. **(Optional) Custom domain:** add it in the service's *Settings → Custom Domains*,
    then update `BETTER_AUTH_URL` and `APP_URL` to the new origin.

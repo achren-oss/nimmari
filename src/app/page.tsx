@@ -18,9 +18,6 @@ export default async function HomePage() {
         recipient. They sign once with their hand; you receive it back, sealed.
       </p>
       <div className="action-row" style={{ justifyContent: "center", marginTop: "32px" }}>
-        <Link href="/signup" className="btn-primary">
-          Create an account <span className="arr">→</span>
-        </Link>
         <Link href="/login" className="btn-secondary">
           Log in
         </Link>

@@ -6,7 +6,7 @@ import { getTableColumns, getTableName } from "drizzle-orm";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { document, field, signingSession } from "@/db/schema";
+import { apiKey, document, field, signingSession } from "@/db/schema";
 
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -34,7 +34,16 @@ describe("journaled OSS migrations", () => {
         }
         await migrate(db, { migrationsFolder: "drizzle" });
         await migrate(db, { migrationsFolder: "drizzle" });
-        for (const table of [document, field, signingSession]) {
+        // Verify SQL idempotence too, rather than relying only on journal skipping.
+        for (const statement of readFileSync("drizzle/0005_api_keys.sql", "utf8").split("--> statement-breakpoint")) {
+          await client.execute(statement);
+        }
+        const indexes = await client.execute("PRAGMA index_list(api_key)");
+        expect(indexes.rows).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "api_key_key_hash_unique", unique: 1 }),
+          expect.objectContaining({ name: "api_key_owner_idx" }),
+        ]));
+        for (const table of [apiKey, document, field, signingSession]) {
           const columns = await client.execute(`PRAGMA table_info(${getTableName(table)})`);
           expect(columns.rows.map((row) => row.name).sort()).toEqual(Object.values(getTableColumns(table)).map((column) => column.name).sort());
         }

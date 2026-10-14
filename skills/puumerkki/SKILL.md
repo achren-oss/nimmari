@@ -38,8 +38,16 @@ Use the deployed instance's matching source when its version differs from this r
 - Use HTTPS for a remote instance; use HTTP only for an intended local/test setup.
 - Keep signer URLs out of public logs; deliver each only to its intended signer.
 - Recognize that `PUUMERKKI_BASE_URL` is a client convention in this skill.
-- Ensure the OSS server has `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID` set (the client uses the same API key);
-  the bearer identity owns documents as that configured service-account user.
+- Use a provisioned regular database key; document requests act as its owner.
+- Public signup is disabled. Administrators bootstrap with the server root key
+  (`PUUMERKKI_API_KEY`): `POST /api/accounts {email,name,password?}`, then
+  `POST /api/keys {name,ownerUserId,scope:"regular"}`. Store returned secrets privately.
+- Root account/key administration works without `PUUMERKKI_API_OWNER_ID`; root
+  document requests require it. Admin database keys still access only their owner's documents.
+- Account/key endpoints require bearer keys and reject session cookies. Regular
+  keys can create regular keys and list/revoke keys for their own owner only.
+- Rotate by creating a replacement, switching the client secret, then revoking
+  the old key with `DELETE /api/keys/{id}` or `POST /api/keys/{id}/revoke`.
 - Check returned URLs: the server constructs them from its `APP_URL`.
 
 ## Prepare the source

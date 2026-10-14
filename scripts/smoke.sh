@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end smoke test: signup → upload HTML → create signing session →
+# End-to-end smoke test: provision → login → upload HTML → create signing session →
 # sign → fetch signed PDF → verify %PDF- header.
 set -euo pipefail
 
@@ -14,10 +14,21 @@ TS="$(date +%s)-$$"
 EMAIL="smoke-$TS@example.com"
 SIG="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII="
 
-echo "==> signup ($EMAIL)"
-curl -fsS -c "$COOKIE_JAR" -X POST "$HOST/api/auth/sign-up/email" \
+# Admin provisioning replaces disabled public signup. Do not enable shell tracing.
+ROOT_KEY="${PUUMERKKI_API_KEY:-}"
+if [[ -z "$ROOT_KEY" ]]; then
+  echo "A root API key is required for smoke account provisioning" >&2
+  exit 1
+fi
+echo "==> provision ($EMAIL)"
+curl -fsS -X POST "$HOST/api/accounts" \
+  -H "Authorization: Bearer $ROOT_KEY" -H "Content-Type: application/json" \
+  -d "{\"name\":\"Smoke\",\"email\":\"$EMAIL\",\"password\":\"password1234\"}" \
+  -o /dev/null -w "  http=%{http_code}\n"
+echo "==> login"
+curl -fsS -c "$COOKIE_JAR" -X POST "$HOST/api/auth/sign-in/email" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"Smoke\",\"email\":\"$EMAIL\",\"password\":\"password1234\",\"signaturePng\":\"$SIG\"}" \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"password1234\"}" \
   -o /dev/null -w "  http=%{http_code}\n"
 
 echo "==> upload HTML"

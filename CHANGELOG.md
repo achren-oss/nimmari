@@ -5,6 +5,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ## [Unreleased]
 
 ### Added
+- Admin account provisioning and scoped, hashed API keys with metadata listing, revocation, and best-effort usage tracking.
+- Idempotent `0005_api_keys.sql` registered in the migration journal, authentication tests, and bootstrap documentation.
 - AcroForm field import, date fields, unvalidated personal identity (`hetu`) fields, and signer-slot keys supporting multiple roles with the same email.
 - Multi-signer parallel/sequential routing, deferred invitations, private viewer PDFs, document notification controls, and completion/cancel/decline webhooks.
 - Per-document audit timezone and combined seals with a dedicated seal page when needed.
@@ -13,6 +15,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Production regression tests and a separate OpenAPI contract for the implemented API.
 
 ### Changed
+- Disable public signup and implicit provider account creation; preserve password login and signer links.
+- Treat `PUUMERKKI_API_KEY` as root/admin, allowing account/key bootstrap without a document owner. Database keys remain scoped to their owner's documents.
 - Prefill accepts owner bearer authentication and merges by default, with explicit replace/clear modes.
 - Required-field indicators and all-missing validation, responsive signer pages, and PDF text wrapping/shrinking preserve entered values.
 - Signed artifacts rebuild from original source with all signer slots and a single audit seal; completed PDFs expose all values to all parties.

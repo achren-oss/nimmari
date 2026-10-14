@@ -7,10 +7,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Operator self-check: renders a tiny HTML page with Chromium and reports
-// timing or the launch/render error. Service-account bearer key only.
+// timing or the launch/render error. Root/admin bearer key only.
 export async function GET(req: Request) {
-  const who = await getApiIdentity(req);
-  if (!who || who.via !== "bot") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const who = await getApiIdentity(req, { allowOwnerlessRoot: true });
+  if (!who || who.via === "session" || who.scope !== "admin") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const t0 = Date.now();
   try {
     const pdf = await renderHtmlToPdf("<html><body><p>Puumerkki PDF self-check</p></body></html>");

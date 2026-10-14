@@ -2,6 +2,9 @@
 """Poll completion and download a validated signed PDF. Requires requests."""
 import argparse
 import math
+import hashlib
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import os
 from pathlib import Path
 import shutil
@@ -19,6 +22,18 @@ def positive_seconds(value):
     if not math.isfinite(seconds) or seconds <= 0:
         raise argparse.ArgumentTypeError('Must be a finite positive number of seconds')
     return seconds
+
+
+def retry_after_seconds(value, fallback):
+    if value:
+        try:
+            if value.strip().isdigit():
+                return int(value.strip())
+            date = parsedate_to_datetime(value)
+            return max(0, (date - datetime.now(timezone.utc)).total_seconds())
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return fallback
 
 
 def fetch(session, endpoint, output, timeout, poll_interval):
@@ -44,18 +59,29 @@ def fetch(session, endpoint, output, timeout, poll_interval):
 
     pdfinfo = shutil.which('pdfinfo')
     if not pdfinfo:
-        print('pdfinfo unavailable; checking PDF header and EOF marker only.', file=sys.stderr)
+        print('pdfinfo unavailable; checking integrity headers and PDF markers.', file=sys.stderr)
     # Three attempts total; invalid bytes never replace the requested output.
     for attempt in range(1, 4):
         temporary = None
+        retry_delay = 2 ** (attempt - 1)
         try:
             response = session.get(endpoint + '/pdf?signed=1', timeout=(10, 90),
                                    allow_redirects=False)
+            if response.status_code == 503:
+                retry_delay = retry_after_seconds(response.headers.get('Retry-After'), retry_delay)
+                raise RuntimeError('PDF not ready')
             if response.status_code != 200:
                 raise RuntimeError('Signed PDF HTTP failure')
             data = response.content
-            if not data.startswith(b'%PDF-') or b'%%EOF' not in data:
-                raise RuntimeError('Missing PDF header or EOF marker')
+            length = response.headers.get('Content-Length', '')
+            if not length.isdigit() or len(data) != int(length):
+                raise RuntimeError('PDF length missing or mismatched')
+            digest = response.headers.get('X-Content-SHA256', '')
+            if hashlib.sha256(data).hexdigest() != digest.lower():
+                raise RuntimeError('PDF SHA-256 missing or mismatched')
+            if (not data.startswith(b'%PDF-') or b'%%EOF' not in data[-2048:]
+                    or b'startxref' not in data):
+                raise RuntimeError('Missing PDF header or trailer')
             with tempfile.NamedTemporaryFile(dir=output.parent, suffix='.pdf', delete=False) as stream:
                 temporary = Path(stream.name)
                 stream.write(data)
@@ -74,7 +100,7 @@ def fetch(session, endpoint, output, timeout, poll_interval):
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-        time.sleep(2 ** (attempt - 1))
+        time.sleep(retry_delay)
 
 
 def main():

@@ -186,11 +186,17 @@ notification setting. No helper retries mutations automatically.
   `python3 scripts/fetch_signed_pdf.py DOC_ID final.pdf --timeout 300` before rendering.
   It polls owner `GET /api/documents/{id}` until `completed`, then downloads
   `GET /api/documents/{id}/pdf?signed=1` using the environment Bearer key.
-  It requires a `%PDF-` header and `%%EOF`, and a successful `pdfinfo` parse when
-  available, retrying failed downloads/validation up to three attempts with backoff.
+  The server sends `Content-Length`, `X-Content-SHA256` (hex SHA-256), and
+  `Repr-Digest` (base64 SHA-256). The helper requires matching length and SHA-256,
+  a `%PDF-` header, `startxref`, `%%EOF` in the last 2048 bytes, and a successful
+  `pdfinfo` parse when available. It retries transport failures or validation
+  mismatches up to three attempts with backoff; HTTP 503 honors `Retry-After`.
   `--timeout` controls completion polling; `--poll-interval` defaults to 2 seconds.
-- Never trust the first PDF byte stream: an immediate fetch after the last signer
-  POST once returned an 8 KB truncated PDF with no trailer; a later refetch was valid.
+- Validate every downloaded PDF: transport truncation can remove the trailer,
+  even when the server generated a complete artifact.
+  The server rejects incomplete PDF bytes with 503 `{"error":"PDF not ready"}`
+  and `Retry-After: 2`. A `signed=1` request while status is `sent` still returns
+  the existing intermediate PDF; poll for `completed` to retrieve the final artifact.
   Any equivalent retrieval must poll completion and validate the downloaded PDF.
 - Run `scripts/render_check.sh final.pdf new-render-directory`.
 - Open and **look at every generated PNG**, including every seal page.

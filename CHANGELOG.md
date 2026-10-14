@@ -19,6 +19,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Pin PDF.js to the react-pdf worker version and update Next.js to 16.3.8.
 
 ### Fixed
+- Serve PDF downloads with Content-Length and SHA-256 integrity headers; withhold incomplete PDFs with HTTP 503 and Retry-After. The signed PDF helper verifies length, checksum, and trailer markers before saving and honors Retry-After.
 - Serialize concurrent signing and stop transitions; reject adding signers after signing begins and unassigned multi-signer signature fields.
 - Exclude private values from later signers' PDF text layers and enforce token expiry on document HTML/PDF downloads.
 

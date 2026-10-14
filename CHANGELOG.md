@@ -7,6 +7,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ## [1.1.1] - 2026-10-14
 
 ### Fixed
+- Share signer, bearer-failure, and Better Auth login/sign-up rate limits across instances via the database. Use atomic fixed-window signer/bearer counters with hashed keys, fail-open database checks, and Vercel-aware client IP resolution. Run migrations before upgrading (`0007_rate_limits.sql`).
 - Show signed-copy and sender notification messages on the post-signing done page only when their email sends succeed. Missing email configuration, disabled notifications, and provider errors show neutral confirmation.
 - Respect the signing session email preference for signed-copy emails while preserving document-controlled sender notices.
 

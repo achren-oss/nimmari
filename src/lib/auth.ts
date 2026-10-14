@@ -32,7 +32,9 @@ export const auth = betterAuth({
       },
     },
   },
+  advanced: { ipAddress: { ipAddressHeaders: ["x-vercel-forwarded-for", "x-real-ip", "x-forwarded-for"] } },
   rateLimit: {
+    storage: "database",
     enabled: true,
     window: 60,
     max: 30,

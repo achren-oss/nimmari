@@ -1,8 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import config from "../../../next.config";
-import { SlidingWindowLimiter, signRateLimit, bearerFailureRateLimit } from "../rate-limit";
 import { token } from "../ids";
 
 it("sets security headers on every path with preview and worker support", async () => {
@@ -17,30 +16,6 @@ it("sets security headers on every path with preview and worker support", async 
   for (const directive of ["frame-ancestors 'none'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "worker-src 'self' blob:"]) {
     expect(headers["Content-Security-Policy"]).toContain(directive);
   }
-});
-
-describe("sliding windows", () => {
-  it("expires individual requests and reports retry time", () => {
-    const limiter = new SlidingWindowLimiter();
-    expect(limiter.check("a", 2, 0)).toBeNull();
-    expect(limiter.check("a", 2, 1000)).toBeNull();
-    expect(limiter.check("a", 2, 2000)?.headers.get("Retry-After")).toBe("58");
-    expect(limiter.check("b", 2, 2000)).toBeNull();
-    expect(limiter.check("a", 2, 60000)).toBeNull();
-    expect(limiter.check("a", 2, 60000)?.status).toBe(429);
-    expect(limiter.check("a", 2, 61000)).toBeNull();
-  });
-  it("limits token writes across IPs and IP reads across tokens", () => {
-    for (let i = 0; i < 20; i++) expect(signRateLimit(new Request("http://localhost", { method: "POST", headers: { "x-real-ip": `write-${i}` } }), "write-token")).toBeNull();
-    expect(signRateLimit(new Request("http://localhost", { method: "POST" }), "write-token")?.status).toBe(429);
-    for (let i = 0; i < 60; i++) expect(signRateLimit(new Request("http://localhost", { headers: { "x-real-ip": "read-ip" } }), `token-${i}`)).toBeNull();
-    expect(signRateLimit(new Request("http://localhost", { headers: { "x-real-ip": "read-ip" } }), "another")?.status).toBe(429);
-  });
-  it("limits bearer failures separately", () => {
-    const req = new Request("http://localhost", { headers: { "x-real-ip": "auth-ip" } });
-    for (let i = 0; i < 30; i++) expect(bearerFailureRateLimit(req)).toBeNull();
-    expect(bearerFailureRateLimit(req)?.status).toBe(429);
-  });
 });
 
 it("generates 192-bit signing tokens and retains 30-day expiry", () => {
@@ -67,7 +42,7 @@ it("requires an authentication guard on every API route", () => {
     else if (name.startsWith("sign/")) {
       expect(source, name).toContain("eq(signingSession.token, token)");
       expect(source, name).toContain("s.expiresAt < new Date()");
-      expect(source.match(/signRateLimit\(req, token\)/g)?.length, name).toBe(source.match(/export async function (GET|POST)/g)?.length);
+      expect(source.match(/await signRateLimit\(req, token\)/g)?.length, name).toBe(source.match(/export async function (GET|POST)/g)?.length);
     } else {
       expect(source, name).toMatch(/await (getApiIdentity|getAgentIdentity)\(req/);
       if (name.startsWith("documents/[id]/")) expect(source, name).toMatch(/doc.ownerId/);

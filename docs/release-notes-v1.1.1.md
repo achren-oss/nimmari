@@ -6,6 +6,8 @@ The post-signing done page now confirms that the signature was recorded and only
 
 Signed-copy emails now respect both the document notification setting and the signing session email preference. Sender notices continue to follow the document setting. The redirect carries display-only send results; these flags do not authorize PDF access or prove delivery.
 
+Signer and bearer-failure limits now use atomic database-backed fixed windows with hashed bucket keys, shared across serverless and multi-instance deployments. Database check failures are logged and allow signing to continue. Better Auth login/sign-up limits also use database storage. Client IP resolution prefers `X-Vercel-Forwarded-For`, then `X-Real-IP`, then the first `X-Forwarded-For` address; configure trusted proxies to overwrite these headers.
+
 ## Upgrade
 
-Install v1.1.1 or use `ghcr.io/puumerkki/puumerkki:1.1.1` and restart the application. No new database migration or configuration is required for upgrades from v1.1.0.
+Install v1.1.1 or use `ghcr.io/puumerkki/puumerkki:1.1.1`. Before starting the updated application, run `node --env-file=.env.local scripts/migrate.mjs` to apply the journaled migrations, including idempotent `0007_rate_limits.sql` for both rate-limit tables. The Docker image runs migrations automatically before startup.

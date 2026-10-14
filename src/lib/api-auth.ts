@@ -6,8 +6,8 @@ import { getServerSession } from "@/lib/session";
 import { hashApiKey, matchesRootKey } from "@/lib/api-keys";
 
 const failures = new WeakMap<Request, Response>();
-function bearerFailure(req: Request): null {
-  failures.set(req, bearerFailureRateLimit(req) ?? Response.json({ error: "Unauthorized" }, { status: 401 }));
+async function bearerFailure(req: Request): Promise<null> {
+  failures.set(req, await bearerFailureRateLimit(req) ?? Response.json({ error: "Unauthorized" }, { status: 401 }));
   return null;
 }
 export function authenticationFailure(req: Request): Response {

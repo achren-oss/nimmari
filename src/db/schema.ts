@@ -1,4 +1,5 @@
-import { sqliteTable, text, integer, blob, index } from "drizzle-orm/sqlite-core";
+import { createHash } from "node:crypto";
+import { sqliteTable, text, integer, blob, index, customType } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -139,3 +140,23 @@ export const apiKey = sqliteTable("api_key", {
   lastUsedAt: integer("last_used_at", { mode: "timestamp" }),
   revokedAt: integer("revoked_at", { mode: "timestamp" }),
 }, (table) => [index("api_key_owner_idx").on(table.ownerUserId)]);
+
+export const rateLimitBucket = sqliteTable("rate_limit_bucket", {
+  key: text("key").primaryKey(),
+  windowStart: integer("window_start").notNull(),
+  count: integer("count").notNull(),
+});
+
+// Hash Better Auth's IP/path keys on writes and query parameters alike.
+const hashedRateLimitKey = customType<{ data: string; driverData: string }>({
+  dataType: () => "text",
+  toDriver: (value) => createHash("sha256").update(value).digest("hex"),
+});
+
+// Better Auth stores millisecond timestamps as numbers, not Date objects.
+export const rateLimit = sqliteTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: hashedRateLimitKey("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request").notNull(),
+});

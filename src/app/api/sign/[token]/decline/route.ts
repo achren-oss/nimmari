@@ -8,7 +8,7 @@ import { signRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const limited = signRateLimit(req, token);
+  const limited = await signRateLimit(req, token);
   if (limited) return limited;
   const [s] = await db.select().from(signingSession).where(eq(signingSession.token, token));
   if (!s) return NextResponse.json({ error: "Invalid link" }, { status: 404 });

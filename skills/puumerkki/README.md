@@ -4,10 +4,10 @@ An agent-agnostic skill for Puumerkki's HTTP e-signature API. Read
 [SKILL.md](SKILL.md) for the workflow and [API cheatsheet](reference/api-cheatsheet.md)
 for schemas and implementation details. No agent vendor or connector is required.
 
-Install Python 3 and `requests` for the flow example; install `pypdf` for AcroForm conversion and Poppler for PDF checks.
-Set `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY` through your environment or
-secret manager. Configure the OSS instance with `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID`; use that key as the client’s `PUUMERKKI_BOT_API_KEY`. Never print
-or commit keys. Use the field, prefill, and signer JSON examples in the cheatsheet,
+Install Python 3 and run `python3 -m pip install -r requirements.txt`. Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides PDF rendering and text checks for `scripts/render_check.sh`.
+Set `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` through your environment or
+secret manager. Configure the OSS instance with `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID`; use the same API key on the client. Never print
+or commit keys. The Python clients accept `PUUMERKKI_BOT_API_KEY` as a deprecated fallback when `PUUMERKKI_API_KEY` is empty or unset. Use the field, prefill, and signer JSON examples in the cheatsheet,
 adapting them to your document.
 
 ```sh

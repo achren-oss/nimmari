@@ -10,11 +10,11 @@ Use Node.js 20.19+ or a newer supported version and npm:
 npm ci
 cp .env.example .env.local
 # Set BETTER_AUTH_SECRET and configure Chromium for HTML PDF rendering.
-node scripts/migrate.mjs
+node --env-file=.env.local scripts/migrate.mjs
 npm run dev
 ```
 
-The migration script defaults to local SQLite and applies the numbered Drizzle journal migrations. Export database variables before running Drizzle if you use a remote database. See [README.md](README.md) for configuration and the service user script.
+The migration script loads `.env.local`, defaults to local SQLite, and applies the numbered Drizzle journal migrations. `npm run db:push` is development-only; use migrations for deployments. See [README.md](README.md) for configuration and the service user script.
 
 ## Checks
 

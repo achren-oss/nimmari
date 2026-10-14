@@ -31,14 +31,14 @@ Use the deployed instance's matching source when its version differs from this r
 
 ## Configure access
 
-- Read `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY` from the environment.
+- Read `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` from the environment.
 - Set the base URL to the intended instance, without a trailing slash.
 - Send `Authorization: Bearer <key>` to owner API routes.
 - Never print, embed in examples, or expose the key in logs or request dumps.
 - Use HTTPS for a remote instance; use HTTP only for an intended local/test setup.
 - Keep signer URLs out of public logs; deliver each only to its intended signer.
 - Recognize that `PUUMERKKI_BASE_URL` is a client convention in this skill.
-- Ensure the OSS server has `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID` set (the client uses `PUUMERKKI_BOT_API_KEY` for that API key);
+- Ensure the OSS server has `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID` set (the client uses the same API key);
   the bearer identity owns documents as that configured service-account user.
 - Check returned URLs: the server constructs them from its `APP_URL`.
 

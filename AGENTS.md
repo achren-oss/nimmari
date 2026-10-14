@@ -106,6 +106,5 @@ that user's documents. See the [API table in the README](README.md#current-api).
 See [the portable agent skill](skills/puumerkki/SKILL.md), its
 [API reference](skills/puumerkki/reference/api-cheatsheet.md), and the
 [implemented API OpenAPI contract](openapi/current.yaml). The skill uses client
-variables `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY`; the latter holds the
-OSS server's `PUUMERKKI_API_KEY`. Disposable synthetic tests are separate from
+variables `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` (the same key as on the server). Disposable synthetic tests are separate from
 real signing and require deliberate test authorization.

@@ -8,6 +8,10 @@ Signed-copy emails now respect both the document notification setting and the si
 
 Signer and bearer-failure limits now use atomic database-backed fixed windows with hashed bucket keys, shared across serverless and multi-instance deployments. Database check failures are logged and allow signing to continue. Better Auth login/sign-up limits also use database storage. Client IP resolution prefers `X-Vercel-Forwarded-For`, then `X-Real-IP`, then the first `X-Forwarded-For` address; configure trusted proxies to overwrite these headers.
 
+Remote libSQL counters use the client directly, convert returned numeric values, and retry competing inserts at most three times. Failed checks allow requests with redacted diagnostics.
+
+For troubleshooting, set `PUUMERKKI_RATE_LIMIT_DEBUG=1` to add `X-RateLimit-Count` and an eight-character hexadecimal `X-RateLimit-IpKey` to signing GET responses, including HTTP 429 responses. The count is the rejecting bucket or the busiest successful bucket, and is omitted when a check fails. The IP key is a truncated SHA-256 fingerprint of the selected IP bucket; raw IP addresses are never included. Diagnostics are disabled by default; unset the variable or set it to `0` after troubleshooting.
+
 ## Upgrade
 
 Install v1.1.1 or use `ghcr.io/puumerkki/puumerkki:1.1.1`. Before starting the updated application, run `node --env-file=.env.local scripts/migrate.mjs` to apply the journaled migrations, including idempotent `0007_rate_limits.sql` for both rate-limit tables. The Docker image runs migrations automatically before startup.

@@ -6,6 +6,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [1.1.1] - 2026-10-14
 
+- Fix remote libSQL rate-limit counters with direct client execution, numeric row conversion, and atomic UPDATE-then-INSERT with at most three attempts. Fail open with redacted diagnostics; optional `PUUMERKKI_RATE_LIMIT_DEBUG=1` adds signing GET count and eight-hex IP bucket fingerprint headers without raw IPs.
+
 ### Fixed
 - Share signer, bearer-failure, and Better Auth login/sign-up rate limits across instances via the database. Use atomic fixed-window signer/bearer counters with hashed keys, fail-open database checks, and Vercel-aware client IP resolution. Run migrations before upgrading (`0007_rate_limits.sql`).
 - Show signed-copy and sender notification messages on the post-signing done page only when their email sends succeed. Missing email configuration, disabled notifications, and provider errors show neutral confirmation.

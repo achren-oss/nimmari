@@ -6,13 +6,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-const local = vi.hoisted(() => ({ session: vi.fn(), db: undefined as unknown }));
-vi.mock("@/db", () => ({ get db() { return local.db; } }));
+const local = vi.hoisted(() => ({ session: vi.fn(), db: undefined as unknown, client: undefined as unknown }));
+vi.mock("@/db", () => ({ get db() { return local.db; }, get client() { return local.client; } }));
 vi.mock("@/lib/session", () => ({ getServerSession: local.session }));
 const directory = await mkdtemp("/tmp/puumerkki-auth-test-");
 const client = createClient({ url: `file:${directory}/test.db` });
 const database = drizzle(client, { schema });
 local.db = database;
+local.client = client;
 const { hashApiKey } = await import("../api-keys");
 const { getApiIdentity } = await import("../api-auth");
 const accounts = await import("@/app/api/accounts/route");

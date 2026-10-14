@@ -19,7 +19,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/puumerkki/puumerkki
+          images: ghcr.io/achren-oss/puumerkki
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -27,7 +27,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=Puumerkki
             org.opencontainers.image.description=Headless, self-hosted e-signature service
-            org.opencontainers.image.source=https://github.com/puumerkki/puumerkki
+            org.opencontainers.image.source=https://github.com/achren-oss/puumerkki
             org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.vendor=Big Blue Games Oy
       - uses: docker/build-push-action@v6

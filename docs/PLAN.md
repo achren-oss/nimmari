@@ -2,7 +2,7 @@
 
 ## Decisions (7.10.2026)
 - License: AGPL-3.0-only. Copyright: Big Blue Games Oy.
-- Repo: puumerkki/puumerkki, clean history. Self-host only, no hosted service.
+- Repo: achren-oss/puumerkki, clean history. Self-host only, no hosted service.
 - Contributions: DCO (`git commit -s`). Contact: GitHub private vulnerability reporting, no email.
 - Signatures: v1 is an eIDAS Simple Electronic Signature (disclaimer). PAdES + RFC 3161 timestamp in v1.1.
 - HTML form mode included in v1.

@@ -7,7 +7,7 @@ Puumerkki is a self-hosted, headless e-signature service. Upload a PDF or an HTM
 - **Signer links** without signer accounts, with a 30-day expiry.
 - **Audit footer** with signing metadata and a SHA-256 content hash.
 - **Service-account API** using a bearer key.
-- **Self-hosting:** Docker image `ghcr.io/puumerkki/puumerkki:1.0.0`, a Render blueprint (Render + Turso, both with free tiers) and a Vercel + Turso guide.
+- **Self-hosting:** Docker image `ghcr.io/achren-oss/puumerkki:1.0.0`, a Render blueprint (Render + Turso, both with free tiers) and a Vercel + Turso guide.
 
 ## Signature level
 v1.0.0 produces eIDAS **Simple Electronic Signatures (SES)** only. PAdES and trusted timestamps are planned for v1.1. This is not legal advice; check suitability for your jurisdiction and document type.

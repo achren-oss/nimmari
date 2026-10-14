@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Use GitHub private vulnerability reporting: [submit a private security advisory](https://github.com/puumerkki/puumerkki/security/advisories/new). Do not report vulnerabilities through public issues or disclose sensitive details publicly.
+Use GitHub private vulnerability reporting: [submit a private security advisory](https://github.com/achren-oss/puumerkki/security/advisories/new). Do not report vulnerabilities through public issues or disclose sensitive details publicly.
 
 Include affected versions, reproduction steps, expected and actual behavior, potential impact, and a minimal proof of concept where possible. Remove credentials, signing tokens, personal data, and real documents from reports.
 

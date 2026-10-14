@@ -73,8 +73,8 @@ First open-source release under AGPL-3.0-only.
 ### Notes
 - Signatures are eIDAS Simple Electronic Signatures (SES). PAdES and trusted timestamps remain future work.
 
-[1.0.0]: https://github.com/puumerkki/puumerkki/releases/tag/v1.0.0
+[1.0.0]: https://github.com/achren-oss/puumerkki/releases/tag/v1.0.0
 
-[1.1.0]: https://github.com/puumerkki/puumerkki/releases/tag/v1.1.0
+[1.1.0]: https://github.com/achren-oss/puumerkki/releases/tag/v1.1.0
 
-[1.1.1]: https://github.com/puumerkki/puumerkki/releases/tag/v1.1.1
+[1.1.1]: https://github.com/achren-oss/puumerkki/releases/tag/v1.1.1

@@ -4,6 +4,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Added
+- Self-contained AI-agent installation runbook covering Docker setup, private secret handling, account and regular-key provisioning, skill installation, and a silent synthetic signing-link smoke test.
+
 ## [1.1.1] - 2026-10-14
 
 - Fix remote libSQL rate-limit counters with direct client execution, numeric row conversion, and atomic UPDATE-then-INSERT with at most three attempts. Fail open with redacted diagnostics; optional `PUUMERKKI_RATE_LIMIT_DEBUG=1` adds signing GET count and eight-hex IP bucket fingerprint headers without raw IPs.

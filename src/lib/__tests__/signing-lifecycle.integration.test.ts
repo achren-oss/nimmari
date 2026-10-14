@@ -7,7 +7,8 @@ import { OPS, Util, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-const state = vi.hoisted(() => ({ db: null as unknown, webhook: vi.fn() }));
+const state = vi.hoisted(() => ({ db: null as unknown, webhook: vi.fn(), email: vi.fn() }));
+vi.mock("resend", () => ({ Resend: class { emails = { send: state.email }; } }));
 vi.mock("@/db", () => ({ get db() { return state.db; } }));
 vi.mock("@/lib/api-auth", () => ({ getApiIdentity: async () => ({ userId: "owner" }) }));
 vi.mock("@/lib/rate-limit", () => ({ signRateLimit: () => null }));
@@ -42,6 +43,8 @@ beforeAll(async () => {
 });
 afterAll(() => { client.close(); rmSync(directory, { recursive: true, force: true }); });
 beforeEach(async () => {
+  vi.unstubAllEnvs();
+  state.email.mockReset().mockResolvedValue({ data: { id: "email" }, error: null });
   state.webhook.mockReset().mockResolvedValue({ success: true });
   await db.delete(schema.field); await db.delete(schema.signingSession); await db.delete(schema.document); await db.delete(schema.user);
   const now = new Date();
@@ -284,5 +287,39 @@ describe("per-session field assignment", () => {
     const artifact = await rebuildSignedArtifact(doc, fields.map((f) => ({ ...f, value: f.type === "signature" ? SIG : "UNSIGNED-VALUE" })), sessions.map((s) => ({ ...s, signedAt: s.signerKey === "seller" ? new Date() : null })));
     const loaded = await PDFDocument.load(artifact.signedPdf!);
     expect(loaded.getPage(0).node.Resources()!.lookup(PDFName.of("XObject"), PDFDict).keys()).toHaveLength(1);
+  });
+});
+
+describe("post-signing email outcomes", () => {
+  it.each([
+    { configured: false, notify: true, enabled: true, calls: 0, copy: false, sender: false },
+    { configured: true, notify: false, enabled: true, calls: 0, copy: false, sender: false },
+    { configured: true, notify: true, enabled: false, calls: 1, copy: false, sender: true },
+    { configured: true, notify: true, enabled: true, calls: 2, copy: true, sender: true },
+  ])("reports actual notices for $configured/$notify/$enabled", async ({ configured, notify, enabled, calls, copy, sender }) => {
+    vi.stubEnv("RESEND_API_KEY", configured ? "test-key" : "");
+    vi.stubEnv("RESEND_FROM", configured ? "test@example.com" : "");
+    await db.update(schema.document).set({ notify });
+    await db.update(schema.signingSession).set({ inviteEmailEnabled: enabled });
+    const response = await sign(request({ values: {}, signaturePng: SIG }), tokenParams("t0"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, copyEmailSent: copy, senderEmailSent: sender });
+    expect(state.email).toHaveBeenCalledTimes(calls);
+    if (!enabled && calls) expect(state.email.mock.calls[0][0].to).toBe("owner@example.com");
+  });
+
+  it.each(["copy", "sender"])("does not claim a failed %s email was sent", async (failed) => {
+    vi.stubEnv("RESEND_API_KEY", "test-key");
+    vi.stubEnv("RESEND_FROM", "test@example.com");
+    await db.update(schema.document).set({ notify: true });
+    state.email.mockImplementation(async ({ to }: { to: string }) => {
+      if (to === (failed === "copy" ? "signer0@example.com" : "owner@example.com")) {
+        if (failed === "sender") throw new Error("Network failure");
+        return { data: null, error: { message: "Provider rejected send" } };
+      }
+      return { data: { id: "email" }, error: null };
+    });
+    const response = await sign(request({ values: {}, signaturePng: SIG }), tokenParams("t0"));
+    expect(await response.json()).toEqual({ ok: true, copyEmailSent: failed !== "copy", senderEmailSent: failed !== "sender" });
   });
 });

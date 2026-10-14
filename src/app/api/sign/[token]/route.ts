@@ -321,14 +321,16 @@ export async function POST(
   }
 
   // Send notifications only if document.notify is true
+  let notices = { copyEmailSent: false, senderEmailSent: false };
   if (doc.notify) {
-    await sendSignedNotices({
+    notices = await sendSignedNotices({
       documentId: doc.id,
       documentTitle: doc.title,
       ownerId: doc.ownerId,
       recipientEmail: s.recipientEmail,
       recipientName: s.recipientName,
       signingToken: s.token,
+      copyEmailEnabled: s.inviteEmailEnabled,
     });
   }
 
@@ -364,7 +366,7 @@ export async function POST(
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...notices });
 }
 
 async function sendSignedNotices(args: {
@@ -374,12 +376,14 @@ async function sendSignedNotices(args: {
   recipientEmail: string;
   recipientName: string | null;
   signingToken: string;
+  copyEmailEnabled: boolean;
 }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM;
-  if (!apiKey || !from) return;
+  const unsent = { copyEmailSent: false, senderEmailSent: false };
+  if (!apiKey || !from) return unsent;
   const [owner] = await db.select().from(user).where(eq(user.id, args.ownerId));
-  if (!owner) return;
+  if (!owner) return unsent;
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const recipientPdfUrl = `${appUrl}/api/sign/${args.signingToken}/pdf`;
@@ -393,8 +397,8 @@ async function sendSignedNotices(args: {
   const button = (href: string, label: string) =>
     `<p style="margin:24px 0;"><a href="${href}" style="background:#1d2839;color:#fbf6e6;padding:11px 18px;border-radius:6px;text-decoration:none;display:inline-block;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">${label}</a></p>`;
 
-  await Promise.allSettled([
-    resend.emails.send({
+  const [copy, sender] = await Promise.allSettled([
+    args.copyEmailEnabled ? resend.emails.send({
       from,
       to: args.recipientEmail,
       subject: `Your signed copy of "${args.documentTitle}"`,
@@ -404,7 +408,7 @@ async function sendSignedNotices(args: {
   ${button(recipientPdfUrl, "View signed PDF →")}
   <p style="color:#5a4a31;font-size:13px;">Or paste this link: <a href="${recipientPdfUrl}" style="color:#5a4a31;">${recipientPdfUrl}</a></p>
 </div>`,
-    }),
+    }) : Promise.resolve(null),
     resend.emails.send({
       from,
       to: owner.email,
@@ -416,6 +420,10 @@ async function sendSignedNotices(args: {
 </div>`,
     }),
   ]);
+  return {
+    copyEmailSent: copy.status === "fulfilled" && copy.value !== null && !copy.value.error,
+    senderEmailSent: sender.status === "fulfilled" && !sender.value.error,
+  };
 }
 
 function escapeHtml(s: string) {

@@ -12,6 +12,9 @@ import type { PdfFieldBox } from "./pdf-field-extents";
 import { lowestContentBottomOnPage } from "./pdf-field-extents";
 import { pdfAuditText } from "./pdf-audit-text";
 
+import { signaturePlacement } from "./signature-placement";
+export { MIN_SIGNATURE_HEIGHT_PT } from "./signature-placement";
+
 type StampField = {
   type: "text" | "textarea" | "checkbox" | "signature" | "date" | "hetu";
   page: number;
@@ -115,21 +118,9 @@ export async function stampPdf({
         });
       }
     } else if (f.type === "signature" && sigImage) {
-      const imgRatio = sigImage.width / sigImage.height;
-      const boxRatio = w / h;
-      let drawW = w;
-      let drawH = h;
-      if (imgRatio > boxRatio) {
-        drawH = w / imgRatio;
-      } else {
-        drawW = h * imgRatio;
-      }
-      page.drawImage(sigImage, {
-        x: x + (w - drawW) / 2,
-        y: y + (h - drawH) / 2,
-        width: drawW,
-        height: drawH,
-      });
+      page.drawImage(sigImage, signaturePlacement(
+        sigImage.width / sigImage.height, x, y, w, h, pw, ph,
+      ));
     }
   }
 

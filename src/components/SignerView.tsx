@@ -11,6 +11,8 @@ import { MobileSignBar } from "@/components/MobileSignBar";
 import { PDF_OVERLAY_WIDTH } from "@/lib/pdf-coords";
 import { missingRequiredFields, requiredForSigner, shortFieldLabel } from "@/lib/required-fields";
 
+import { MIN_SIGNATURE_HEIGHT_PT, signaturePlacement } from "@/lib/signature-placement";
+
 const DRAFT_PREFIX = "puumerkki:draft:";
 
 type Draft = {
@@ -91,6 +93,7 @@ export function SignerView({
     return () => ro.disconnect();
   }, []);
   const scale = pageWidth / PDF_OVERLAY_WIDTH;
+  const [pageSizes, setPageSizes] = useState<Record<number, { width: number; height: number }>>({});
   const [values, setValues] = useState<Record<string, string>>(() => initialValues ?? {});
   const [signaturePng, setSignaturePng] = useState<string | null>(savedSignature);
   const [error, setError] = useState<string | null>(null);
@@ -233,7 +236,12 @@ export function SignerView({
                   className="relative inline-block bg-white shadow ring-1 ring-slate-200"
                   style={{ width: pageWidth }}
                 >
-                  <Page pageNumber={i + 1} width={pageWidth} renderTextLayer={false} />
+                  <Page pageNumber={i + 1} width={pageWidth} renderTextLayer={false}
+                    onLoadSuccess={(page) => {
+                      const viewport = page.getViewport({ scale: 1 });
+                      setPageSizes((sizes) => ({ ...sizes, [i]: { width: viewport.width, height: viewport.height } }));
+                    }}
+                  />
                   {fields
                     .filter((f) => f.page === i)
                     .map((f) => (
@@ -246,6 +254,7 @@ export function SignerView({
                         readOnly={!!(f.readOnly || f.prefilled)}
                         missing={missingIds.has(f.id)}
                         scale={scale}
+                        pageSize={pageSizes[i]}
                       />
                     ))}
                 </div>
@@ -307,6 +316,7 @@ function FieldOverlay({
   readOnly,
   missing = false,
   scale = 1,
+  pageSize,
 }: {
   field: Field;
   value: string;
@@ -315,7 +325,9 @@ function FieldOverlay({
   readOnly: boolean;
   missing?: boolean;
   scale?: number;
+  pageSize?: { width: number; height: number };
 }) {
+  const [imageSize, setImageSize] = useState<{ src: string; ratio: number } | null>(null);
   const isRequired = field.required && !readOnly;
   const shortLabel = shortFieldLabel(field.label);
   const placeholder = shortLabel ? `${shortLabel}${isRequired ? " *" : ""}` : isRequired ? "*" : "";
@@ -410,6 +422,14 @@ function FieldOverlay({
       </>
     );
   }
+  const ptToPx = PDF_OVERLAY_WIDTH / (pageSize?.width ?? 595) * scale;
+  const pageHeight = (pageSize?.height ?? 842) * ptToPx;
+  const placement = signaturePlacement(
+    imageSize?.src === signaturePng ? imageSize.ratio : 4,
+    field.x * scale, pageHeight - (field.y + field.height) * scale,
+    field.width * scale, field.height * scale, PDF_OVERLAY_WIDTH * scale,
+    pageHeight, MIN_SIGNATURE_HEIGHT_PT * ptToPx,
+  );
   return (
     <>
     {marker}
@@ -417,14 +437,21 @@ function FieldOverlay({
       id={a11y.id}
       title={field.label}
       className={`absolute flex items-center justify-center rounded border-2 border-dashed border-blue-400 bg-yellow-50${missingRing}`}
-      style={style}
+      style={{ ...style, padding: 0, overflow: "visible" }}
     >
       {signaturePng ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={signaturePng}
           alt="signature"
-          className="h-full w-full object-contain p-1"
+          onLoad={(e) => setImageSize({ src: signaturePng, ratio: e.currentTarget.naturalWidth / e.currentTarget.naturalHeight })}
+          className="pointer-events-none absolute max-w-none"
+          style={{
+            left: placement.x - field.x * scale - 2,
+            top: pageHeight - placement.y - placement.height - field.y * scale - 2,
+            width: placement.width,
+            height: placement.height,
+          }}
         />
       ) : (
         <span className="text-xs text-blue-700">Sign here{isRequired ? " *" : ""} →</span>

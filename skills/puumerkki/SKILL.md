@@ -75,7 +75,7 @@ into page content; printed page content and non-widget annotations remain.
 upward to at least 20px. Repeat `--skip-prefix` and `--private NAME=signerKey`
 as needed; private fields become required hetu fields assigned to that key.
 Normalize rotated/cropped pages first. Review required flags, radio/dropdown
-conversions and layout. **Add signature boxes manually**; the helper never invents them.
+conversions and layout. **Assign imported signature boxes to signers and add missing signature lines manually**.
 
 
 - Use multipart `importAcroForm="true"` only when its conversions fit the form.
@@ -116,6 +116,8 @@ conversions and layout. **Add signature boxes manually**; the helper never inven
 - Remember that the renderer now retains nonempty text even when line capacity
   would previously have dropped it; this does not guarantee an unclipped result.
 - Place note text between printed rules, or use one field per ruled line.
+- Signature fields should be about 40–45 PDF points tall, with their bottom on the signature line. Convert points to the 800px overlay coordinate space using `800 / pageWidthPt`. Stamping enforces a 40 pt minimum rendered height, growing upward without clipping and preserving the cropped image aspect ratio; field width and page bounds can limit this height. Native AcroForm signature boxes are extended upward to at least 40 pt while keeping their bottom.
+
 - Put signature boxes inside the blank signature area, clear of printed labels.
 - Assign signature fields only to that signer's own line: the submitted image
   is stamped into **every** signature field assigned to that signer.

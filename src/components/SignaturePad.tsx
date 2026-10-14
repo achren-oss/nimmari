@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
+import { signatureCanvasDataUrl } from "@/lib/signature-canvas";
 
 export type SignaturePadHandle = {
   toDataURL: () => string | null;
@@ -111,7 +112,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, Props>(function Signa
   useImperativeHandle(ref, () => ({
     toDataURL: () => {
       if (empty.current) return null;
-      return canvasRef.current?.toDataURL("image/png") ?? null;
+      return canvasRef.current ? signatureCanvasDataUrl(canvasRef.current) : null;
     },
     clear: () => {
       const canvas = canvasRef.current;

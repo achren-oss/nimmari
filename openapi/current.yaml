@@ -19,6 +19,64 @@ security:
 - ownerSession: []
 paths:
   /api/accounts:
+    get:
+      summary: List accounts (admin/root only)
+      description: >-
+        Sorted by createdAt ascending. Disabled accounts cannot log in; existing server sessions are
+        ignored.
+      parameters:
+        - name: email
+          in: query
+          description: Exact email filter, trimmed and lowercased
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accounts
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - email
+                        - name
+                        - createdAt
+                        - disabled
+                      properties:
+                        id:
+                          type: string
+                        email:
+                          type: string
+                        name:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        disabled:
+                          type: boolean
+        '401':
+          description: Missing, malformed, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Regular key or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - ownerBearer: []
+      operationId: getApiAccounts
     post:
       summary: Provision an account (admin/root only)
       description: Email is trimmed and lowercased. Omit password to generate one
@@ -93,6 +151,60 @@ paths:
       security:
         - ownerBearer: []
       operationId: postApiAccounts
+  /api/accounts/{id}:
+    delete:
+      summary: Delete an account (admin/root only)
+      description: >-
+        Never deletes documents. In one transaction, revokes keys, deletes sessions and
+        credential/provider accounts, then deletes the user; API keys cascade.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - id
+                properties:
+                  ok:
+                    const: true
+                  id:
+                    type: string
+        '401':
+          description: Missing, malformed, invalid or revoked key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Regular key or session authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Configured API owner, caller key owner, or account owns documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - ownerBearer: []
+      operationId: deleteApiAccountsId
   /api/keys:
     post:
       summary: Create an API key

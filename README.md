@@ -102,6 +102,26 @@ printf 'Authorization: Bearer %s\n' "$PUUMERKKI_API_KEY" | \
 
 HTTP 400 means authentication passed and the required PDF was omitted; HTTP 401 means the key or owner configuration is missing or incorrect. Do not use curl verbose/trace options or log the key.
 
+### Account administration
+
+`GET /api/accounts` requires an admin or root key and returns
+`{accounts:[{id,email,name,createdAt,disabled}]}` sorted by creation time (oldest
+first). `?email=...` filters by exact email after trimming and lowercasing.
+Timestamps are ISO strings. `disabled` means `user.disabled_at` is non-null;
+disabled accounts cannot log in and their existing server sessions are ignored.
+
+`DELETE /api/accounts/{id}` requires an admin or root key. Unknown IDs return
+404. The configured `PUUMERKKI_API_OWNER_ID`, the caller's own key owner, and
+accounts owning any documents return 409 with `{error}`. Documents are never
+deleted. Success returns `{ok:true,id}` after one transaction revokes the owner's
+keys, deletes sessions and credentials, and deletes the user. Revoked key rows
+then cascade with the user. Missing/invalid keys return 401; regular keys and
+session authentication return 403 for both operations.
+
+Apply `drizzle/0006_account_disabled.sql` before deploying with
+`node --env-file=.env.local scripts/migrate.mjs`. The migration is registered in
+the Drizzle journal and runs once. This adds no public account-disable endpoint.
+
 ## Use with an AI agent
 
 Copy the entire `skills/puumerkki` folder into your agent's skills directory, such as `.claude/skills`, `.cursor/skills`, or `~/.codex/skills`. Alternatively, point the agent directly at [SKILL.md](skills/puumerkki/SKILL.md). Install the Python helper dependencies from the repository:
@@ -126,6 +146,8 @@ AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which
 | --- | --- | --- | --- |
 | GET | `/api/health` | None | Liveness and database check; `{"status":"ok"}` or 503 |
 | GET, POST | `/api/auth/[...all]` | Better Auth route-specific | Login, logout, session and other Better Auth handlers; signup disabled |
+| GET | `/api/accounts` | Admin/root bearer | List accounts; optional exact normalized `email` filter |
+| DELETE | `/api/accounts/{id}` | Admin/root bearer | Delete an account without documents; configured owner and self are protected |
 | POST | `/api/accounts` | Admin/root bearer | Provision account with `{email,name,password?}` |
 | GET, POST | `/api/keys` | Bearer key | List key metadata or create a scoped key |
 | DELETE | `/api/keys/[id]` | Bearer key | Revoke a key |

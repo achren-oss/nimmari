@@ -119,3 +119,97 @@ describe("API key authentication and provisioning", () => {
     expect((await revoke.DELETE(request("test-root-key"), { params: Promise.resolve({ id: regular.id }) })).status).toBe(200);
   });
 });
+
+describe("account management", () => {
+  const remove = async (key: string | undefined, id: string) => {
+    const route = await import("@/app/api/accounts/[id]/route");
+    return route.DELETE(request(key), { params: Promise.resolve({ id }) });
+  };
+  const provision = async (email: string) => (await accounts.POST(request("test-root-key", { email, name: email, password: "password1234" }))).json();
+
+  it("enforces list and delete permissions without falling back from invalid bearer keys", async () => {
+    const owner = await provision("permissions@example.com");
+    const regular = await (await keys.POST(request("test-root-key", { name: "Regular", ownerUserId: owner.id }))).json();
+    for (const [key, status] of [[undefined, 401], ["invalid", 401], [regular.key, 403]] as const) {
+      expect((await accounts.GET(request(key))).status).toBe(status);
+      expect((await remove(key, owner.id)).status).toBe(status);
+    }
+    local.session.mockResolvedValue({ user: { id: owner.id } });
+    expect((await accounts.GET(request())).status).toBe(403);
+    expect((await remove(undefined, owner.id)).status).toBe(403);
+    expect((await accounts.GET(request("invalid"))).status).toBe(401);
+    expect((await remove("invalid", owner.id)).status).toBe(401);
+    expect((await remove("test-root-key", "unknown" )).status).toBe(404);
+  });
+
+  it("lists only public account metadata, sorts dates, and normalizes the exact email filter", async () => {
+    const owner = await provision("listing@example.com");
+    await database.update(schema.user).set({ disabledAt: new Date(), createdAt: new Date(1000) }).where(eq(schema.user.id, owner.id));
+    const admin = await (await keys.POST(request("test-root-key", { name: "Admin", scope: "admin", ownerUserId: owner.id }))).json();
+    const response = await accounts.GET(request(admin.key));
+    const { accounts: rows } = await response.json();
+    expect(rows[0]).toEqual({ id: owner.id, email: owner.email, name: owner.name, createdAt: new Date(1000).toISOString(), disabled: true });
+    expect(rows.map((row: { createdAt: string }) => row.createdAt)).toEqual(rows.map((row: { createdAt: string }) => row.createdAt).sort());
+    const filtered = await (await accounts.GET(request("test-root-key", undefined, "/api/accounts?email=LISTING%40example.com"))).json();
+    expect(filtered.accounts).toEqual([rows[0]]);
+    expect(await (await accounts.GET(request("test-root-key", undefined, "/api/accounts?email=absent@example.com"))).json()).toEqual({ accounts: [] });
+  });
+
+  it("protects configured owners, the caller, and accounts with documents", async () => {
+    const owner = await provision("protected@example.com");
+    vi.stubEnv("PUUMERKKI_API_OWNER_ID", owner.id);
+    expect((await remove("test-root-key", owner.id)).status).toBe(409);
+    vi.stubEnv("PUUMERKKI_API_OWNER_ID", "");
+    const admin = await (await keys.POST(request("test-root-key", { name: "Admin", scope: "admin", ownerUserId: owner.id }))).json();
+    expect((await remove(admin.key, owner.id)).status).toBe(409);
+    await database.insert(schema.document).values({ id: "protected-document", ownerId: owner.id, title: "Keep", createdAt: new Date(), updatedAt: new Date() });
+    const response = await remove("test-root-key", owner.id);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toHaveProperty("error");
+    expect(await database.query.document.findFirst({ where: eq(schema.document.id, "protected-document") })).toBeTruthy();
+    expect(await getApiIdentity(request(admin.key))).toBeTruthy();
+  });
+
+  it("deletes credentials, sessions and keys with foreign keys enabled; old credentials stop working", async () => {
+    await client.execute("PRAGMA foreign_keys = ON");
+    const caller = await provision("delete-admin@example.com");
+    const admin = await (await keys.POST(request("test-root-key", { name: "Admin", scope: "admin", ownerUserId: caller.id }))).json();
+    for (const key of [admin.key, "test-root-key"]) {
+      const owner = await provision(`delete-${key === admin.key ? "admin" : "root"}-target@example.com`);
+      const targetKey = await (await keys.POST(request("test-root-key", { name: "Target", ownerUserId: owner.id }))).json();
+      await auth.api.signInEmail({ body: { email: owner.email, password: "password1234" } });
+      const response = await remove(key, owner.id);
+      expect(await response.json()).toEqual({ ok: true, id: owner.id });
+      expect(response.status).toBe(200);
+      expect(await database.query.user.findFirst({ where: eq(schema.user.id, owner.id) })).toBeUndefined();
+      expect(await database.select().from(schema.account).where(eq(schema.account.userId, owner.id))).toEqual([]);
+      expect(await database.select().from(schema.session).where(eq(schema.session.userId, owner.id))).toEqual([]);
+      expect(await database.select().from(schema.apiKey).where(eq(schema.apiKey.ownerUserId, owner.id))).toEqual([]);
+      expect(await getApiIdentity(request(targetKey.key))).toBeNull();
+      await expect(auth.api.signInEmail({ body: { email: owner.email, password: "password1234" } })).rejects.toThrow();
+    }
+  });
+
+  it("rolls back revocation and credential cleanup if user deletion fails", async () => {
+    const owner = await provision("rollback@example.com");
+    const key = await (await keys.POST(request("test-root-key", { name: "Rollback", ownerUserId: owner.id }))).json();
+    await auth.api.signInEmail({ body: { email: owner.email, password: "password1234" } });
+    await client.execute("CREATE TRIGGER prevent_account_delete BEFORE DELETE ON user BEGIN SELECT RAISE(ABORT, 'test deletion failure'); END");
+    try {
+      await expect(remove("test-root-key", owner.id)).rejects.toThrow();
+      expect(await database.query.user.findFirst({ where: eq(schema.user.id, owner.id) })).toBeTruthy();
+      expect(await database.query.account.findFirst({ where: eq(schema.account.userId, owner.id) })).toBeTruthy();
+      expect(await database.query.session.findFirst({ where: eq(schema.session.userId, owner.id) })).toBeTruthy();
+      expect(await getApiIdentity(request(key.key))).toBeTruthy();
+    } finally {
+      await client.execute("DROP TRIGGER prevent_account_delete");
+    }
+  });
+
+  it("blocks disabled login and session creation", async () => {
+    const owner = await provision("disabled@example.com");
+    await database.update(schema.user).set({ disabledAt: new Date() }).where(eq(schema.user.id, owner.id));
+    await expect(auth.api.signInEmail({ body: { email: owner.email, password: "password1234" } })).rejects.toThrow("Account disabled");
+    expect(await database.select().from(schema.session).where(eq(schema.session.userId, owner.id))).toEqual([]);
+  });
+});

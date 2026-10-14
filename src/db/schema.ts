@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, blob } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, blob, index } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -126,3 +126,15 @@ export const signingSession = sqliteTable("signing_session", {
   // Whether to email this signer their invite (set from send-time notify precedence).
   inviteEmailEnabled: integer("invite_email_enabled", { mode: "boolean" }).notNull().default(true),
 });
+
+export const apiKey = sqliteTable("api_key", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  ownerUserId: text("owner_user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  scope: text("scope", { enum: ["admin", "regular"] }).notNull().default("regular"),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  lastUsedAt: integer("last_used_at", { mode: "timestamp" }),
+  revokedAt: integer("revoked_at", { mode: "timestamp" }),
+}, (table) => [index("api_key_owner_idx").on(table.ownerUserId)]);

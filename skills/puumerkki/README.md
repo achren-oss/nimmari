@@ -6,7 +6,7 @@ for schemas and implementation details. No agent vendor or connector is required
 
 Install Python 3 and run `python3 -m pip install -r requirements.txt`. Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides PDF rendering and text checks for `scripts/render_check.sh`.
 Set `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` through your environment or
-secret manager. Configure the OSS instance with `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID`; use the same API key on the client. Never print
+secret manager. Use a provisioned regular database key on the client. Administrators configure the server root `PUUMERKKI_API_KEY` and provision accounts and keys as described in the [API cheatsheet](reference/api-cheatsheet.md#accounts-and-api-keys). Root document access additionally requires `PUUMERKKI_API_OWNER_ID`. Never print
 or commit keys. The Python clients accept `PUUMERKKI_BOT_API_KEY` as a deprecated fallback when `PUUMERKKI_API_KEY` is empty or unset. Use the field, prefill, and signer JSON examples in the cheatsheet,
 adapting them to your document.
 

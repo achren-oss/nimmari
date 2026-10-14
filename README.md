@@ -21,7 +21,7 @@ Documents are stored in your configured database. Optional Resend email sends si
 - Parallel or sequential signer slots, including several roles with the same email.
 - Private signing views, merge prefill, required-field validation, cancellation, and decline.
 - Optional Resend email, notification controls, signed click-event webhooks, and outbound lifecycle webhooks.
-- Service-account API key for supported document endpoints.
+- Scoped, hashed API keys and admin account provisioning.
 
 ## Quick start
 
@@ -36,7 +36,7 @@ node --env-file=.env.local scripts/migrate.mjs
 npm run dev
 ```
 
-Open http://localhost:3000 and create an account. The migration script reads `.env.local` and defaults to `file:./local.db`; set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` there for a remote database. Next.js also loads `.env.local` for the application. `npm run db:push` is development-only; use migrations for deployments.
+Provision an account through the admin API as described below, then log in at http://localhost:3000. The migration script reads `.env.local` and defaults to `file:./local.db`; set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` there for a remote database. Next.js also loads `.env.local` for the application. `npm run db:push` is development-only; use migrations for deployments.
 
 Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABLE_PATH` to its executable. On Vercel, `@sparticuz/chromium-min` is used, with a pinned Chromium pack downloaded at runtime. PDF uploads use pdf-lib directly.
 
@@ -51,8 +51,8 @@ See [.env.example](.env.example). Empty optional values disable the correspondin
 | `BETTER_AUTH_SECRET` | Strong random authentication secret; set before startup |
 | `BETTER_AUTH_URL` | Authentication origin; `http://localhost:3000` |
 | `APP_URL` | Public origin for signing links; `http://localhost:3000` |
-| `PUUMERKKI_API_KEY` | Optional shared service-account bearer key |
-| `PUUMERKKI_API_OWNER_ID` | Existing user ID that owns service-account documents |
+| `PUUMERKKI_API_KEY` | Optional root/admin bearer secret for bootstrap |
+| `PUUMERKKI_API_OWNER_ID` | Optional existing user ID for root document requests |
 | `SERVICE_USER_EMAIL` | Email for the service-user creation script |
 | `SERVICE_USER_NAME` | Name for that script; `Service Account` |
 | `PUUMERKKI_AUDIT_TIMEZONE` | Default IANA timezone for audit seals (`Europe/Helsinki`) |
@@ -67,7 +67,7 @@ See [.env.example](.env.example). Empty optional values disable the correspondin
 
 ## Self-hosting
 
-Signup is open to anyone who can reach the instance. There is currently no environment variable to disable signup. For a private instance, restrict network access (for example, with a VPN or reverse-proxy access control), including access to the signup API.
+Public signup and implicit provider account creation are disabled. Existing accounts can log in with email/password; signers need no account. Administrators provision accounts through the API. Run `node --env-file=.env.local scripts/migrate.mjs` before deploying new code; Docker runs migrations at startup.
 
 Puumerkki is self-host only. Pick one:
 
@@ -81,12 +81,15 @@ Documents and signed outputs are stored in the database; back it up and test res
 
 ## Create an API key for an AI agent
 
-Sign up in the UI at `/signup` first. After applying migrations, choose the document owner:
+Configure a strong root secret as the server's `PUUMERKKI_API_KEY` (for example, generate one with `openssl rand -hex 32` in a private terminal). Restart the app after updating its secret configuration. Keep this key for administration.
 
-- Create a separate service user with `node --env-file=.env.local scripts/create-service-user.mjs service@example.com "Service Account"`. The script prints `PUUMERKKI_API_OWNER_ID=...`.
-- Or use your own user ID: run the parameterized query `SELECT id FROM user WHERE email=?` against the configured database, binding your signup email.
+1. Authenticate with the root bearer key and call `POST /api/accounts` with `{email,name,password?}`. The response contains `{id,email,name}`; omitting `password` generates one returned only in this response. Existing email/password login remains available.
+2. Call `POST /api/keys` with `{name:"Document agent",ownerUserId:"<account id>",scope:"regular"}`. Store the returned `key` securely and give the agent this regular key through its environment or secret manager. Only its SHA-256 hash and display prefix are stored.
+3. List metadata with `GET /api/keys`. Rotate by creating a replacement, updating the client secret, verifying it works, then revoking its predecessor with `DELETE /api/keys/{id}` or `POST /api/keys/{id}/revoke`.
 
-Generate a key with `openssl rand -hex 32` in a private terminal and store it securely. Set `PUUMERKKI_API_KEY` to that key and `PUUMERKKI_API_OWNER_ID` to the chosen existing user ID in `.env.local` or your host's environment settings. Restart or redeploy the app. **Both variables must be set or bearer authentication is rejected with HTTP 401.** The key can access only that owner's documents.
+Root/admin keys can provision accounts and manage keys for any owner. Regular keys can create only regular keys for their own owner and list/revoke that owner's keys. All database keys, including admin keys, access only their owner's documents. Account/key endpoints reject browser sessions. Root can bootstrap without `PUUMERKKI_API_OWNER_ID`; set that variable to an existing user ID only if root should also access that owner's documents. Missing, malformed, unknown or revoked bearer keys never fall back to cookies.
+
+See the [account/key API reference](skills/puumerkki/reference/api-cheatsheet.md#accounts-and-api-keys) for request limits and responses. Generated passwords and plaintext keys are returned once; never log them.
 
 To verify without uploading a document or printing the key, load the client key securely into the environment, set `PUUMERKKI_BASE_URL`, and run in Bash with tracing disabled:
 
@@ -107,7 +110,7 @@ Copy the entire `skills/puumerkki` folder into your agent's skills directory, su
 python3 -m pip install -r skills/puumerkki/requirements.txt
 ```
 
-Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides the tools used by `render_check.sh`. Set `PUUMERKKI_BASE_URL` to your instance URL and provide `PUUMERKKI_API_KEY` through the agent's environment or secret manager, using the same key configured on the server.
+Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides the tools used by `render_check.sh`. Set `PUUMERKKI_BASE_URL` to your instance URL and provide `PUUMERKKI_API_KEY` through the agent's environment or secret manager, using a provisioned regular database key.
 
 Example first prompt:
 
@@ -122,7 +125,11 @@ AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which
 | Method | Endpoint | Auth | Purpose |
 | --- | --- | --- | --- |
 | GET | `/api/health` | None | Liveness and database check; `{"status":"ok"}` or 503 |
-| GET, POST | `/api/auth/[...all]` | Better Auth route-specific | Signup, login, logout, session and other Better Auth handlers |
+| GET, POST | `/api/auth/[...all]` | Better Auth route-specific | Login, logout, session and other Better Auth handlers; signup disabled |
+| POST | `/api/accounts` | Admin/root bearer | Provision account with `{email,name,password?}` |
+| GET, POST | `/api/keys` | Bearer key | List key metadata or create a scoped key |
+| DELETE | `/api/keys/[id]` | Bearer key | Revoke a key |
+| POST | `/api/keys/[id]/revoke` | Bearer key | Revoke a key (POST alias) |
 | POST | `/api/documents` | Owner | Upload multipart `pdf`, optional `title`, `importAcroForm`, `notify`, `webhookUrl`, `auditTimezone`; returns document ID (4 MB limit) |
 | POST | `/api/documents/html` | Owner | Upload multipart `html` file or string and optional `title`; extracts fields (2 MB limit) |
 | GET | `/api/documents/[id]` | Owner | Read document metadata, fields, and signing sessions |
@@ -152,7 +159,7 @@ The recipient email is still recorded on the signing session and in the audit tr
 
 All signing-token routes check expiry. Cancel/decline invalidate outstanding links; previously signed slots retain read-only PDF access until expiry. There is no document-list endpoint, webhook subscription API, or implemented versioned API.
 
-The [portable Puumerkki agent skill](skills/puumerkki/README.md) includes a full workflow, [API reference](skills/puumerkki/reference/api-cheatsheet.md), and helpers. Clients use `PUUMERKKI_BASE_URL` and the same `PUUMERKKI_API_KEY` as the server. The implemented contract is [openapi/current.yaml](openapi/current.yaml); [openapi/v1.yaml](openapi/v1.yaml) remains the future design.
+The [portable Puumerkki agent skill](skills/puumerkki/README.md) includes a full workflow, [API reference](skills/puumerkki/reference/api-cheatsheet.md), and helpers. Clients use `PUUMERKKI_BASE_URL` and a provisioned regular key in `PUUMERKKI_API_KEY`. The implemented contract is [openapi/current.yaml](openapi/current.yaml); [openapi/v1.yaml](openapi/v1.yaml) remains the future design.
 
 PDF uploads support `importAcroForm="true"` to extract native field rectangles; inspect the returned count, warnings, and errors. Both upload routes accept `webhookUrl`, `notify="false"`, and `auditTimezone`. For fully silent operation, disable notify at upload and send. Send-time `notify:false` disables invitations and sequential follow-ups only; signed notices follow the document setting.
 
@@ -184,7 +191,7 @@ To run the end-to-end smoke script against a running app with Chromium configure
 bash scripts/smoke.sh
 ```
 
-It requires Bash, curl, Python 3, and standard shell utilities. It creates a test account and document in the target database; temporary files are cleaned up, database records are retained.
+It requires Bash, curl, Python 3, standard shell utilities, and the root key in `PUUMERKKI_API_KEY` for disposable account provisioning. It creates a test account and document in the target database; temporary files are cleaned up, database records are retained.
 
 ## Legal disclaimer
 

@@ -8,6 +8,59 @@ Puumerkki produces simple electronic signatures (SES). A signature collected
 from the wrong person, or put on the wrong line, can't be undone by the API.
 Follow these rules.
 
+## Accounts and API keys
+
+Public signup is disabled, including `POST /api/auth/sign-up/email` and implicit
+provider signup. Existing accounts still log in with email/password. Signing links
+(`/sign/{token}` and `/api/sign/...`) require no account.
+
+Use `Authorization: Bearer <key>`. The server's `PUUMERKKI_API_KEY` root
+key has admin scope. Root document requests
+act as `PUUMERKKI_API_OWNER_ID`; without that owner, only account/key administration
+is available. Database keys act on their owner's documents regardless of scope;
+admin scope grants account/key administration, not access to other owners' documents.
+All account/key endpoints require API keys: session cookies return 403. Missing,
+unknown, malformed or revoked keys return 401 and never fall back to a session.
+
+### Bootstrap and provision
+
+1. Configure a strong root key on the server through your deployment's secret store.
+2. Call `POST /api/accounts` with the root key and JSON
+   `{"email":"owner@example.com","name":"Example Owner","password":"chosen-password"}`.
+   Only root/admin keys are allowed; regular keys return 403. Success is 201 with
+   `{id,email,name}`. Omit `password` to generate one and receive it once in the
+   response's `password` property. Password limits follow Better Auth (8–128 chars).
+   Duplicate normalized email returns 409; invalid input returns 400.
+3. Call `POST /api/keys` with root/admin authentication and JSON
+   `{"name":"Document agent","scope":"regular","ownerUserId":"<account id>"}`.
+   Success is 201 with `{id,name,scope,ownerUserId,prefix,createdAt,key}`.
+   Store `key` securely: its plaintext is returned only on creation.
+4. Give the agent that regular key for document operations. Keep the root key
+   for administration. Optionally set `PUUMERKKI_API_OWNER_ID` to the new account
+   ID if the root key should also act on that account's documents.
+
+`scope` defaults to `regular`; `ownerUserId` defaults to the caller's owner.
+An ownerless root must supply `ownerUserId` (otherwise 400). Unknown owners return
+404. Regular keys can create only regular keys for themselves (otherwise 403).
+Admin/root keys can create either scope for any existing owner.
+
+`GET /api/keys` returns `{keys:[{id,name,scope,ownerUserId,prefix,createdAt,
+lastUsedAt,revokedAt}]}` with no hashes or plaintext. Admin/root sees all keys and
+may filter with `?ownerUserId=...`; regular keys see only their own, ignoring that
+filter. Timestamps are ISO strings; unused/revocation timestamps may be null.
+
+`DELETE /api/keys/{id}` and `POST /api/keys/{id}/revoke` both revoke a key and return
+`{ok:true}`. Regular callers can revoke only their own keys; missing or inaccessible
+keys return 404. Repeated revocation is safe. Revoked keys immediately stop authenticating.
+Rotation: create a new key, update the agent's secret, verify it works, then revoke
+its predecessor. Keys use `pmk_` plus 32 random bytes encoded as base64url; the DB
+stores only SHA-256 hashes and an 8-character display prefix. `lastUsedAt` tracking
+is best effort. Apply `drizzle/0005_api_keys.sql` before deploying this code; it is
+registered in the Drizzle journal. Run
+`node --env-file=.env.local scripts/migrate.mjs` before deployment.
+
+Machine-readable API: [OpenAPI](openapi/current.yaml).
+
 ## Rules
 
 1. **Ask before you create fields.** Before placing any field, ask the user:
@@ -71,9 +124,8 @@ A user photographs a paper form and says "put this in Puumerkki, I'll sign":
    `GET /api/documents/[id]` and fetch the result with
    `GET /api/documents/[id]/pdf?signed=1` once `status` is `completed`.
 
-Authenticate with `Authorization: Bearer <PUUMERKKI_API_KEY>`. The key acts
-as the single user configured in `PUUMERKKI_API_OWNER_ID`, and can only reach
-that user's documents. See the [API table in the README](README.md#current-api).
+Authenticate with `Authorization: Bearer <PUUMERKKI_API_KEY>`. A database key acts as its owner; the root environment key acts as
+`PUUMERKKI_API_OWNER_ID` for document requests. Both reach only that owner's documents. See the [API table in the README](README.md#current-api).
 
 ## Lifecycle, notifications, and signer slots
 
@@ -106,5 +158,5 @@ that user's documents. See the [API table in the README](README.md#current-api).
 See [the portable agent skill](skills/puumerkki/SKILL.md), its
 [API reference](skills/puumerkki/reference/api-cheatsheet.md), and the
 [implemented API OpenAPI contract](openapi/current.yaml). The skill uses client
-variables `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` (the same key as on the server). Disposable synthetic tests are separate from
+variables `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` (a provisioned regular key for document work). Disposable synthetic tests are separate from
 real signing and require deliberate test authorization.

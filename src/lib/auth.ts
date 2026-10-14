@@ -8,8 +8,10 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
-    autoSignIn: true,
+    disableSignUp: true,
   },
+  // Block implicit account creation by any future auth provider as well.
+  databaseHooks: { user: { create: { before: async () => false } } },
   user: {
     additionalFields: {
       signaturePng: {

@@ -2,7 +2,8 @@
 
 Use `PUUMERKKI_BASE_URL` as the client instance URL and
 `Authorization: Bearer $PUUMERKKI_API_KEY` for owner routes.
-Configure the OSS server with `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID`. Use the same API key on the client.
+Use a provisioned regular database key on the client. The server root
+`PUUMERKKI_API_KEY` needs `PUUMERKKI_API_OWNER_ID` only for document requests.
 `PUUMERKKI_BASE_URL` is not a server environment variable; server signing links
 use `APP_URL` (fallback `http://localhost:3000`). Never log the key.
 
@@ -350,3 +351,56 @@ Treat these files as authoritative over conflicting prose in API.md:
 - [Private PDF views](../../../src/lib/signer-view-pdf.ts), [masking](../../../src/lib/hetu.ts), [field payloads](../../../src/lib/signer-fields.ts).
 - [Cancel](../../../src/app/api/documents/[id]/cancel/route.ts), [decline](../../../src/app/api/sign/[token]/decline/route.ts), [stop/events](../../../src/lib/document-stop.ts), [token access](../../../src/lib/token-access.ts).
 - [Webhook delivery](../../../src/lib/webhook.ts), [rate limits](../../../src/lib/rate-limit.ts), [sequential invitations](../../../src/lib/sequential-invites.ts).
+
+## Accounts and API keys
+
+Public signup is disabled, including `POST /api/auth/sign-up/email` and implicit
+provider signup. Existing accounts still log in with email/password. Signing links
+(`/sign/{token}` and `/api/sign/...`) require no account.
+
+Use `Authorization: Bearer <key>`. The server's `PUUMERKKI_API_KEY` root
+key has admin scope. Root document requests
+act as `PUUMERKKI_API_OWNER_ID`; without that owner, only account/key administration
+is available. Database keys act on their owner's documents regardless of scope;
+admin scope grants account/key administration, not access to other owners' documents.
+All account/key endpoints require API keys: session cookies return 403. Missing,
+unknown, malformed or revoked keys return 401 and never fall back to a session.
+
+### Bootstrap and provision
+
+1. Configure a strong root key on the server through your deployment's secret store.
+2. Call `POST /api/accounts` with the root key and JSON
+   `{"email":"owner@example.com","name":"Example Owner","password":"chosen-password"}`.
+   Only root/admin keys are allowed; regular keys return 403. Success is 201 with
+   `{id,email,name}`. Omit `password` to generate one and receive it once in the
+   response's `password` property. Password limits follow Better Auth (8–128 chars).
+   Duplicate normalized email returns 409; invalid input returns 400.
+3. Call `POST /api/keys` with root/admin authentication and JSON
+   `{"name":"Document agent","scope":"regular","ownerUserId":"<account id>"}`.
+   Success is 201 with `{id,name,scope,ownerUserId,prefix,createdAt,key}`.
+   Store `key` securely: its plaintext is returned only on creation.
+4. Give the agent that regular key for document operations. Keep the root key
+   for administration. Optionally set `PUUMERKKI_API_OWNER_ID` to the new account
+   ID if the root key should also act on that account's documents.
+
+`scope` defaults to `regular`; `ownerUserId` defaults to the caller's owner.
+An ownerless root must supply `ownerUserId` (otherwise 400). Unknown owners return
+404. Regular keys can create only regular keys for themselves (otherwise 403).
+Admin/root keys can create either scope for any existing owner.
+
+`GET /api/keys` returns `{keys:[{id,name,scope,ownerUserId,prefix,createdAt,
+lastUsedAt,revokedAt}]}` with no hashes or plaintext. Admin/root sees all keys and
+may filter with `?ownerUserId=...`; regular keys see only their own, ignoring that
+filter. Timestamps are ISO strings; unused/revocation timestamps may be null.
+
+`DELETE /api/keys/{id}` and `POST /api/keys/{id}/revoke` both revoke a key and return
+`{ok:true}`. Regular callers can revoke only their own keys; missing or inaccessible
+keys return 404. Repeated revocation is safe. Revoked keys immediately stop authenticating.
+Rotation: create a new key, update the agent's secret, verify it works, then revoke
+its predecessor. Keys use `pmk_` plus 32 random bytes encoded as base64url; the DB
+stores only SHA-256 hashes and an 8-character display prefix. `lastUsedAt` tracking
+is best effort. Apply `drizzle/0005_api_keys.sql` before deploying this code; it is
+registered in the Drizzle journal. Run
+`node --env-file=.env.local scripts/migrate.mjs` before deployment.
+
+Machine-readable API: [OpenAPI](../../../openapi/current.yaml).

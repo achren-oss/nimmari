@@ -1,5 +1,7 @@
+import { PNG } from "pngjs";
 import { PDFDocument, PDFName, PDFNumber, rgb, StandardFonts } from "pdf-lib";
 
+import { cropSignatureRgba } from "./signature-crop";
 import { PDF_OVERLAY_WIDTH } from "./pdf-coords";
 import { maskHetu } from "./hetu";
 import { formatDateFinnish } from "./validators";
@@ -30,6 +32,23 @@ const CATALOG_SEAL_PAGE = PDFName.of("PuumerkkiSealPage");
 
 const ink = rgb(0.05, 0.1, 0.2);
 
+/** Legacy/API signatures may still contain the full transparent canvas. */
+export function cropSignaturePng(bytes: Uint8Array): Uint8Array {
+  try {
+    const png = PNG.sync.read(Buffer.from(bytes));
+    const cropped = cropSignatureRgba(png.data, png.width, png.height);
+    if (!cropped) return bytes;
+    const output = new PNG({
+      width: cropped.width,
+      height: cropped.height,
+    });
+    output.data = Buffer.from(cropped.data);
+    return PNG.sync.write(output);
+  } catch {
+    return bytes;
+  }
+}
+
 export async function stampPdf({
   pdfBytes,
   fields,
@@ -46,7 +65,7 @@ export async function stampPdf({
   if (signaturePng) {
     const base64 = signaturePng.replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(base64, "base64");
-    sigImage = await pdf.embedPng(buf);
+    sigImage = await pdf.embedPng(cropSignaturePng(buf));
   }
 
   const pages = pdf.getPages();

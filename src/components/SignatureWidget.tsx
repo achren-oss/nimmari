@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
+import { signatureCanvasDataUrl } from "@/lib/signature-canvas";
 
 const FONTS = [
   { id: "Caveat", weight: 600, size: 38 },
@@ -69,7 +70,7 @@ function renderTypedToCanvas(
   ctx.fillStyle = "#1d2839";
   ctx.textBaseline = "middle";
   ctx.fillText(text, padding, height / 2);
-  return c.toDataURL("image/png");
+  return signatureCanvasDataUrl(c);
 }
 
 export const SignatureWidget = forwardRef<SignatureWidgetHandle, Props>(
@@ -124,7 +125,22 @@ export const SignatureWidget = forwardRef<SignatureWidgetHandle, Props>(
       const reader = new FileReader();
       reader.onload = (ev) => {
         const url = ev.target?.result;
-        if (typeof url === "string") setUploaded(url);
+        if (typeof url !== "string") return;
+        const image = new Image();
+        image.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            setUploaded(url);
+            return;
+          }
+          ctx.drawImage(image, 0, 0);
+          setUploaded(signatureCanvasDataUrl(canvas, url));
+        };
+        image.onerror = () => setUploaded(url);
+        image.src = url;
       };
       reader.readAsDataURL(file);
     }

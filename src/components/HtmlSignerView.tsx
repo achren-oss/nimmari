@@ -1,5 +1,7 @@
 "use client";
 
+import { signDoneUrl } from "@/lib/sign-done";
+
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SignatureSidebar, type SignatureSidebarHandle } from "@/components/SignatureSidebar";
@@ -344,7 +346,8 @@ export function HtmlSignerView({
       return;
     }
     clearDraft(token);
-    router.push(`/sign/${token}/done`);
+    const notices = await res.json();
+    router.push(signDoneUrl(token, notices));
   }
 
   return (

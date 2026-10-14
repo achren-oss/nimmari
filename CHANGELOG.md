@@ -4,6 +4,12 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-14
+
+### Fixed
+- Show signed-copy and sender notification messages on the post-signing done page only when their email sends succeed. Missing email configuration, disabled notifications, and provider errors show neutral confirmation.
+- Respect the signing session email preference for signed-copy emails while preserving document-controlled sender notices.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added
@@ -67,3 +73,5 @@ First open-source release under AGPL-3.0-only.
 [1.0.0]: https://github.com/puumerkki/puumerkki/releases/tag/v1.0.0
 
 [1.1.0]: https://github.com/puumerkki/puumerkki/releases/tag/v1.1.0
+
+[1.1.1]: https://github.com/puumerkki/puumerkki/releases/tag/v1.1.1

@@ -1,5 +1,7 @@
 "use client";
 
+import { signDoneUrl } from "@/lib/sign-done";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Document, Page } from "react-pdf";
@@ -190,7 +192,8 @@ export function SignerView({
       return;
     }
     clearDraft(token);
-    router.push(`/sign/${token}/done`);
+    const notices = await res.json();
+    router.push(signDoneUrl(token, notices));
   }
 
   return (

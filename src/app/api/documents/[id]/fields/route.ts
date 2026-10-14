@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field } from "@/db/schema";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { FieldsBody } from "@/lib/field-schema";
 import { id } from "@/lib/ids";
 
@@ -11,7 +11,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const identity = await getApiIdentity(req);
-  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!identity) return authenticationFailure(req);
 
   const { id: docId } = await params;
   const [doc] = await db.select().from(document).where(eq(document.id, docId));

@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { document, field, signingSession } from "@/db/schema";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const identity = await getApiIdentity(req);
-  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!identity) return authenticationFailure(req);
 
   const { id: docId } = await params;
   const [doc] = await db.select().from(document).where(eq(document.id, docId));

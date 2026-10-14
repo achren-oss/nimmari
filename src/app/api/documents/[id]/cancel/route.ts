@@ -3,12 +3,12 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { document } from "@/db/schema";
-import { getApiIdentity } from "@/lib/api-auth";
+import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { stopDocument } from "@/lib/document-stop";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const identity = await getApiIdentity(req);
-  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!identity) return authenticationFailure(req);
   const { id } = await params;
   const [doc] = await db.select().from(document).where(eq(document.id, id));
   if (!doc || doc.ownerId !== identity.userId) return NextResponse.json({ error: "Not found" }, { status: 404 });

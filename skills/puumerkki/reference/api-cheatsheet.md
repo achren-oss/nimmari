@@ -1,8 +1,8 @@
 # Puumerkki HTTP API cheatsheet
 
 Use `PUUMERKKI_BASE_URL` as the client instance URL and
-`Authorization: Bearer $PUUMERKKI_BOT_API_KEY` for owner routes.
-Configure the OSS server with `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID`. Set the client variable `PUUMERKKI_BOT_API_KEY` to that server API key.
+`Authorization: Bearer $PUUMERKKI_API_KEY` for owner routes.
+Configure the OSS server with `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID`. Use the same API key on the client.
 `PUUMERKKI_BASE_URL` is not a server environment variable; server signing links
 use `APP_URL` (fallback `http://localhost:3000`). Never log the key.
 
@@ -258,7 +258,7 @@ Always poll owner GET until `completed` and validate the signed PDF download:
 python3 scripts/fetch_signed_pdf.py DOC_ID final.pdf --timeout 300
 ```
 
-The helper uses `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY` from the
+The helper uses `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` from the
 environment for owner Bearer authentication, without printing the key. It polls
 `GET /api/documents/{id}` (`--poll-interval` defaults to 2 seconds), then downloads
 `/api/documents/{id}/pdf?signed=1`. It checks `%PDF-`, `%%EOF`, and successful

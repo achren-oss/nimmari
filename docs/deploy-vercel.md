@@ -34,6 +34,9 @@ Vercel runs Puumerkki as serverless functions. HTML forms are rendered with
 4. **Environment variables** (Production): `DATABASE_URL`, `DATABASE_AUTH_TOKEN`,
    `BETTER_AUTH_SECRET` (`openssl rand -hex 32`), `BETTER_AUTH_URL` and `APP_URL`
    (your production URL), optional `RESEND_*` and `PUUMERKKI_API_*`.
+   If the URL is not known yet, leave `BETTER_AUTH_URL` and `APP_URL` unset for the first deploy.
    Do not set `PUPPETEER_EXECUTABLE_PATH` on Vercel.
-5. **Deploy**, then open `/api/health` (expects `{"status":"ok"}`) and `/signup`.
-6. **Custom domain:** add it under *Settings → Domains* and update `BETTER_AUTH_URL`/`APP_URL`.
+5. **Deploy to obtain the URL.** The first deploy gives you a `https://<project>.vercel.app` URL. Set both `BETTER_AUTH_URL` and `APP_URL` to that public origin in the Production environment, then **redeploy** so the app uses them. Signing links are built from `APP_URL`; configure it before sending any documents. After redeploying, open `/api/health` (expects `{"status":"ok"}`) and `/signup`.
+6. **Custom domain:** add it under *Settings → Domains* and update `BETTER_AUTH_URL`/`APP_URL`, then redeploy.
+
+Signup is open to anyone who can reach the instance. No environment variable currently disables signup; restrict network access for a private instance. See [API key setup](../README.md#create-an-api-key-for-an-ai-agent) to configure an agent after signup.

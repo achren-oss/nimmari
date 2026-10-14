@@ -32,11 +32,11 @@ npm ci
 cp .env.example .env.local
 # Set BETTER_AUTH_SECRET to a strong random value in .env.local.
 # For HTML PDF rendering, set PUPPETEER_EXECUTABLE_PATH to your browser binary.
-node scripts/migrate.mjs
+node --env-file=.env.local scripts/migrate.mjs
 npm run dev
 ```
 
-Open http://localhost:3000 and create an account. The Drizzle config defaults to `file:./local.db`; when using a remote database, export `DATABASE_URL` and `DATABASE_AUTH_TOKEN` into the shell before running Drizzle. Next.js loads `.env.local` for the application.
+Open http://localhost:3000 and create an account. The migration script reads `.env.local` and defaults to `file:./local.db`; set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` there for a remote database. Next.js also loads `.env.local` for the application. `npm run db:push` is development-only; use migrations for deployments.
 
 Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABLE_PATH` to its executable. On Vercel, `@sparticuz/chromium-min` is used, with a pinned Chromium pack downloaded at runtime. PDF uploads use pdf-lib directly.
 
@@ -65,15 +65,9 @@ See [.env.example](.env.example). Empty optional values disable the correspondin
 | `AWS_LAMBDA_FUNCTION_NAME` | Platform-managed flag selecting serverless Chromium; unset locally |
 | `HOST` | Smoke test origin; `http://localhost:3000` |
 
-Create a service user after applying the schema:
-
-```sh
-node --env-file=.env.local scripts/create-service-user.mjs service@example.com "Service Account"
-```
-
-The script prints `PUUMERKKI_API_OWNER_ID=...`, including when the email already exists. Add that ID and a strong random `PUUMERKKI_API_KEY` to your configuration and restart the app. CLI email/name override the script environment defaults.
-
 ## Self-hosting
+
+Signup is open to anyone who can reach the instance. There is currently no environment variable to disable signup. For a private instance, restrict network access (for example, with a VPN or reverse-proxy access control), including access to the signup API.
 
 Puumerkki is self-host only. Pick one:
 
@@ -84,6 +78,40 @@ Puumerkki is self-host only. Pick one:
   Without `DATABASE_URL` the image uses a SQLite file at `/data/puumerkki.db` (mount a volume). Migrations run on start; `/api/health` reports status.
 
 Documents and signed outputs are stored in the database; back it up and test restores. You are the data controller for your instance.
+
+## Create an API key for an AI agent
+
+Sign up in the UI at `/signup` first. After applying migrations, choose the document owner:
+
+- Create a separate service user with `node --env-file=.env.local scripts/create-service-user.mjs service@example.com "Service Account"`. The script prints `PUUMERKKI_API_OWNER_ID=...`.
+- Or use your own user ID: run the parameterized query `SELECT id FROM user WHERE email=?` against the configured database, binding your signup email.
+
+Generate a key with `openssl rand -hex 32` in a private terminal and store it securely. Set `PUUMERKKI_API_KEY` to that key and `PUUMERKKI_API_OWNER_ID` to the chosen existing user ID in `.env.local` or your host's environment settings. Restart or redeploy the app. **Both variables must be set or bearer authentication is rejected with HTTP 401.** The key can access only that owner's documents.
+
+To verify without uploading a document or printing the key, load the client key securely into the environment, set `PUUMERKKI_BASE_URL`, and run in Bash with tracing disabled:
+
+```bash
+set +x
+printf 'Authorization: Bearer %s\n' "$PUUMERKKI_API_KEY" | \
+  curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  --request POST --header @- --form notify=false "$PUUMERKKI_BASE_URL/api/documents"
+```
+
+HTTP 400 means authentication passed and the required PDF was omitted; HTTP 401 means the key or owner configuration is missing or incorrect. Do not use curl verbose/trace options or log the key.
+
+## Use with an AI agent
+
+Copy the entire `skills/puumerkki` folder into your agent's skills directory, such as `.claude/skills`, `.cursor/skills`, or `~/.codex/skills`. Alternatively, point the agent directly at [SKILL.md](skills/puumerkki/SKILL.md). Install the Python helper dependencies from the repository:
+
+```sh
+python3 -m pip install -r skills/puumerkki/requirements.txt
+```
+
+Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides the tools used by `render_check.sh`. Set `PUUMERKKI_BASE_URL` to your instance URL and provide `PUUMERKKI_API_KEY` through the agent's environment or secret manager, using the same key configured on the server.
+
+Example first prompt:
+
+> Use the Puumerkki skill to prepare this PDF for signing. Ask me who signs, how many signers there are, which line belongs to each person, and which blanks they should fill. Verify field placement before sending, then return the signing links privately in chat without emailing them. Do not fill or sign for anyone.
 
 ## Current API
 
@@ -124,7 +152,7 @@ The recipient email is still recorded on the signing session and in the audit tr
 
 All signing-token routes check expiry. Cancel/decline invalidate outstanding links; previously signed slots retain read-only PDF access until expiry. There is no document-list endpoint, webhook subscription API, or implemented versioned API.
 
-The [portable Puumerkki agent skill](skills/puumerkki/README.md) includes a full workflow, [API reference](skills/puumerkki/reference/api-cheatsheet.md), and helpers. Clients use `PUUMERKKI_BASE_URL` and `PUUMERKKI_BOT_API_KEY` (set to the OSS server's `PUUMERKKI_API_KEY`). The implemented contract is [openapi/current.yaml](openapi/current.yaml); [openapi/v1.yaml](openapi/v1.yaml) remains the future design.
+The [portable Puumerkki agent skill](skills/puumerkki/README.md) includes a full workflow, [API reference](skills/puumerkki/reference/api-cheatsheet.md), and helpers. Clients use `PUUMERKKI_BASE_URL` and the same `PUUMERKKI_API_KEY` as the server. The implemented contract is [openapi/current.yaml](openapi/current.yaml); [openapi/v1.yaml](openapi/v1.yaml) remains the future design.
 
 PDF uploads support `importAcroForm="true"` to extract native field rectangles; inspect the returned count, warnings, and errors. Both upload routes accept `webhookUrl`, `notify="false"`, and `auditTimezone`. For fully silent operation, disable notify at upload and send. Send-time `notify:false` disables invitations and sequential follow-ups only; signed notices follow the document setting.
 

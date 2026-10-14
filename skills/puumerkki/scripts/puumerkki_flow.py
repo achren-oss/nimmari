@@ -35,14 +35,15 @@ def main():
         parser.error("--signers is required; creation also requires pdf, --title, --fields and --prefill")
     if args.send_only and any((args.pdf, args.title, args.fields, args.prefill, args.webhook_url)):
         parser.error("--send-only cannot be combined with creation arguments")
+    # PUUMERKKI_BOT_API_KEY is a deprecated fallback; prefer PUUMERKKI_API_KEY.
     base = os.environ.get("PUUMERKKI_BASE_URL", "").rstrip("/")
-    key = os.environ.get("PUUMERKKI_BOT_API_KEY", "")
+    key = (os.environ.get("PUUMERKKI_API_KEY") or os.environ.get("PUUMERKKI_BOT_API_KEY", ""))
     parsed_url = urlsplit(base)
     if (parsed_url.scheme not in ("http", "https") or not parsed_url.netloc
             or parsed_url.username or parsed_url.password or parsed_url.query or parsed_url.fragment):
         raise ValueError("Set PUUMERKKI_BASE_URL to the instance URL without credentials, query, or fragment")
     if not key:
-        raise ValueError("Set PUUMERKKI_BOT_API_KEY")
+        raise ValueError("Set PUUMERKKI_API_KEY")
     fields_body = load_json(args.fields) if not args.send_only else {"fields": []}
     prefill = load_json(args.prefill) if not args.send_only else {}
     signers = load_json(args.signers)
@@ -151,7 +152,7 @@ if __name__ == "__main__":
     except (ValueError, OSError, RuntimeError) as error:
         # Local messages avoid dumping JSON values; redact the key defensively.
         message = str(error)
-        secret = os.environ.get("PUUMERKKI_BOT_API_KEY")
+        secret = (os.environ.get("PUUMERKKI_API_KEY") or os.environ.get("PUUMERKKI_BOT_API_KEY"))
         if secret:
             message = message.replace(secret, "[redacted]")
         print(message, file=sys.stderr)

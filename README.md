@@ -6,7 +6,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Image: ghcr.io/achren-oss/nimmari](https://img.shields.io/badge/image-ghcr.io%2Fachren-oss%2Fnimmari-2496ED?logo=docker&logoColor=white)](https://github.com/achren-oss/nimmari/pkgs/container/nimmari)
 
-**AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)**
+**AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)** — deploys free on Render + Turso by default.
 
 > **Signatures:** Nimmari produces eIDAS *Simple* Electronic Signatures (SES) only, not AdES/QES. See [Legal disclaimer](#legal-disclaimer).
 

@@ -1,6 +1,6 @@
 # Guidance for AI agents using Nimmari
 
-Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md).
+Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md): free hosted Render + Turso by default; local/self-managed only when explicitly requested.
 
 This file is for AI agents (assistants, bots, automation) that use a
 Nimmari instance's HTTP API for a person. For contributing to the code, see

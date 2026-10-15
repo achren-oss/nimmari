@@ -193,7 +193,7 @@ export async function POST(
 
     for (const f of visibleFields) {
       if (f.type === "signature") {
-        if (f.required && !parsed.data.signaturePng) {
+        if (!parsed.data.signaturePng) {
           return NextResponse.json({ error: `Signature required` }, { status: 400 });
         }
         continue;
@@ -224,6 +224,9 @@ export async function POST(
 
   } else {
     for (const f of visibleFields) {
+      if (f.type === "signature" && !parsed.data.signaturePng) {
+        return NextResponse.json({ error: "Signature required" }, { status: 400 });
+      }
       if (!f.required) continue;
       if (f.prefilled) continue;
       const v = parsed.data.values[f.id];
@@ -270,6 +273,11 @@ export async function POST(
       .where(and(eq(document.id, doc.id), eq(document.status, "sent")))
       .returning();
     if (!locked.length) return null;
+    // Other signatures may advance the version without changing the fields.
+    // Reject only a concurrent field edit; never sign a different layout than validated.
+    const currentFields = await tx.select().from(field).where(eq(field.documentId, doc.id));
+    const definition = (rows: typeof fields) => JSON.stringify(rows.map((f) => ({ ...f, value: f.prefilled ? f.value : null })).sort((a, b) => a.id.localeCompare(b.id)));
+    if (definition(currentFields) !== definition(fields)) return "fields-changed" as const;
     const claimed = await tx.update(signingSession)
       .set({ signedAt: now, signedIp: ip, signedUserAgent: ua })
       .where(and(eq(signingSession.id, s.id), eq(signingSession.token, token), isNull(signingSession.signedAt)))
@@ -292,6 +300,9 @@ export async function POST(
       .where(eq(document.id, doc.id));
     return { allSigned, sessions };
   });
+  if (signed === "fields-changed") {
+    return NextResponse.json({ error: "Document fields changed. Reload the page before signing." }, { status: 409 });
+  }
   if (!signed) {
     const [latest] = await db.select().from(document).where(eq(document.id, doc.id));
     return stoppedDocumentResponse(latest.status) ?? NextResponse.json({ error: "Already signed or document unavailable" }, { status: 409 });

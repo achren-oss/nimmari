@@ -17,7 +17,7 @@ by the token in the path, without an owner bearer token.
 | `POST /api/documents` | Owner | Multipart `pdf`, optional `title`, `importAcroForm`, `notify`, `webhookUrl`, `auditTimezone`; returns `id`, `importedFields` |
 | `POST /api/documents/html` | Owner | Multipart `html` (file or string), optional `title`, `notify`, `webhookUrl`, `auditTimezone`; returns `id`, `fieldCount` |
 | `GET /api/documents/{id}` | Owner | Metadata, status, stop reasons/times, `fields`, `signingSessions` |
-| `PUT /api/documents/{id}/fields` | Owner | `{"fields":[...]}`; draft only; replaces all fields; returns `{"ok":true}` |
+| `PUT /api/documents/{id}/fields` | Owner | `{"fields":[...]}`; draft or unsigned sent; IDs update in place, no IDs replace all; returns `ok`, `fields` |
 | `PUT /api/documents/{id}/prefill` | Owner | `{"values":{"field-key":"value"},"mode":"merge"}`; draft only; returns `ok`, `filled` |
 | `POST /api/documents/{id}/send` | Owner | `{"signers":[...],"notify":false}`; returns signer links and `expiresAt` |
 | `POST /api/documents/{id}/cancel` | Owner | Optional `{"reason":"Withdrawn"}` or empty body; returns `{"ok":true,"status":"cancelled"}` |
@@ -82,7 +82,7 @@ Signature fields should be about 40–45 PDF points tall, with their bottom on t
 Types: `text`, `textarea`, `checkbox`, `date`, `hetu`, `signature`.
 `page` is an integer ≥ 0; `x`, `y`, `width`, `height` are integers;
 width/height ≥ 10. `name` and `assignedSignerKey` are trimmed, nonempty,
-maximum 200 characters. `label` is optional. `required` defaults true,
+maximum 200 characters. `label` is optional. `required` defaults to true only for signature fields, false otherwise,
 `privateForOtherSigners` defaults false. Assignments may be null/omitted.
 The fields endpoint does not check that a box fits a page; verify this yourself.
 Replacing fields generates new IDs and loses existing field values.
@@ -438,3 +438,10 @@ Errors: 404 disabled/missing/short code, 403 wrong code, 410 {error:"already_cla
 10-minute fixed window, 503 if the rate limiter cannot safely check.
 Claim, account, credential and key writes share one transaction; failures roll back.
 Apply journaled migration 0008_setup_claim.sql before deployment.
+
+
+### Field requirements and editing
+
+Only signature fields are required by default. Other field types (text, textarea, date, hetu, checkbox) are optional unless `required:true` is supplied. A visible signature field always requires a signature, even with `required:false`. HTML non-signature fields remain opt-in via `data-pm-required`. Existing stored flags are unchanged.
+
+Field PUT accepts optional existing field `id` values to update in place, preserving omitted metadata and stored flags. Fields omitted from the list are deleted; fields without IDs are inserted with generated names when needed. A request without IDs retains replace-all behavior. Drafts and sent documents with no signatures may be edited; signed, completed, cancelled or declined documents return 409. Pending signers see saved fields on their next load; no emails are sent.

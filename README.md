@@ -123,7 +123,7 @@ Nimmari is self-host only. Pick one:
 
 - **Render + Turso (recommended):** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
-- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.3.0` (published from `v*` tags), or `docker build -t nimmari .`, then
+- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.3.1` (published from `v*` tags), or `docker build -t nimmari .`, then
   `docker run -p 3000:3000 -v nimmari-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host nimmari`.
   Without `DATABASE_URL` the image uses `/data/nimmari.db` for new installs, or reuses `/data/puumerkki.db` if only that legacy file exists (mount the existing volume). An explicit `DATABASE_URL` always wins. Migrations run on start; `/api/health` reports status.
 
@@ -205,7 +205,7 @@ AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which
 | POST | `/api/documents` | Owner | Upload multipart `pdf`, optional `title`, `importAcroForm`, `notify`, `webhookUrl`, `auditTimezone`; returns document ID (4 MB limit) |
 | POST | `/api/documents/html` | Owner | Upload multipart `html` file or string and optional `title`; extracts fields (2 MB limit) |
 | GET | `/api/documents/[id]` | Owner | Read document metadata, fields, and signing sessions |
-| PUT | `/api/documents/[id]/fields` | Owner | Replace draft PDF fields with JSON `{fields: [...]}` |
+| PUT | `/api/documents/[id]/fields` | Owner | Edit draft or unsigned sent PDF fields with JSON `{fields: [...]}` |
 | PUT | `/api/documents/[id]/prefill` | Owner | Merge draft field values with JSON `{values: {...}}`; `clear:true` or `mode:"replace"` clears omitted keys |
 | POST | `/api/documents/[id]/send` | Owner | Create one session per signer slot; JSON `email` or `signers:[{email,name,key,order}]`, optional `senderName` and `notify` (default `true`); returns `url`, `signingSessionId`, `expiresAt`, `emailSent`, and optional `emailNote`. With `notify: false` no email is sent and you deliver `url` yourself |
 | GET | `/api/documents/[id]/pdf` | Owner or matching `?t=` signing token | Read original PDF, or signed PDF with `signed=1` |
@@ -236,6 +236,12 @@ The [portable Nimmari agent skill](skills/nimmari/README.md) includes a full wor
 PDF uploads support `importAcroForm="true"` to extract native field rectangles; inspect the returned count, warnings, and errors. Both upload routes accept `webhookUrl`, `notify="false"`, and `auditTimezone`. For fully silent operation, disable notify at upload and send. Send-time `notify:false` disables invitations and sequential follow-ups only; signed notices follow the document setting.
 
 Assign multi-signer signature fields to `assignedSignerKey` matching each signer's unique `key`, or to `assignedToSignerEmail`. Keys take precedence. The same email may sign in multiple roles using distinct keys. Omit `order` for parallel signing; set zero-based orders for sequential groups. Signers cannot be added after signing starts. Draft fields include `date` (normalized date text) and `hetu` (unvalidated personal identity text). Required fields are marked and all missing fields are reported together.
+
+### Field requirements and editing
+
+Only signature fields are required by default. Other field types (text, textarea, date, hetu, checkbox) are optional unless `required:true` is supplied. A visible signature field always requires a signature, even with `required:false`. HTML non-signature fields remain opt-in via `data-pm-required`. Existing stored flags are unchanged.
+
+Field PUT accepts optional existing field `id` values to update in place, preserving omitted metadata and stored flags. Fields omitted from the list are deleted; fields without IDs are inserted with generated names when needed. A request without IDs retains replace-all behavior. Drafts and sent documents with no signatures may be edited; signed, completed, cancelled or declined documents return 409. Pending signers see saved fields on their next load; no emails are sent.
 
 Later PDF signers see accumulated values and signatures with other signers' private values excluded from the PDF text layer. Completed PDFs show **all values to all parties**, including private fields. Signed artifacts rebuild from the original source under a write transaction and use one combined audit seal, adding a dedicated seal page when necessary. Seal timestamps use upload `auditTimezone`, then `NIMMARI_AUDIT_TIMEZONE`, then `Europe/Helsinki`. Completion, cancellation, and decline emit best-effort webhooks; `NIMMARI_WEBHOOK_SECRET` enables HMAC-SHA256 signatures.
 

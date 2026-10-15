@@ -24,9 +24,9 @@ describe("send body", () => {
 
 describe("fields body", () => {
   const f = { type: "text", page: 0, x: 10, y: 20, width: 100, height: 20 };
-  it("accepts fields and defaults required to true", () => {
+  it("defaults non-signature fields to optional and preserves explicit flags", () => {
     const r = FieldsBody.parse({ fields: [f, { ...f, type: "signature", required: false }] });
-    expect(r.fields[0].required).toBe(true);
+    expect(r.fields[0].required).toBe(false);
     expect(r.fields[1].required).toBe(false);
   });
   it("accepts an empty list", () => {

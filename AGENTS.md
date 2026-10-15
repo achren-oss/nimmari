@@ -1,6 +1,6 @@
 # Guidance for AI agents using Nimmari
 
-Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md): Deploy to Render button + Turso with one-time setup claim by default; local/self-managed only when explicitly requested.
+Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md): agent deploy with Render + Turso API keys and one-time setup claim by default (no server root key). The Deploy to Render button remains the alternative for users who don't want to give an agent provider keys; local/self-managed only when explicitly requested.
 
 This file is for AI agents (assistants, bots, automation) that use a
 Nimmari instance's HTTP API for a person. For contributing to the code, see

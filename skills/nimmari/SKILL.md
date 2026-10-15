@@ -10,7 +10,7 @@ Read [reference/api-cheatsheet.md](reference/api-cheatsheet.md) for request sche
 examples, validation details, lifecycle responses, and implementation sources.
 Use the deployed instance's matching source when its version differs from this repo.
 
-For installation, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/nimmari/blob/main/INSTALL-FOR-AGENTS.md): free hosted Render + Turso is the default; local/self-managed installation requires an explicit user request.
+For installation, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/nimmari/blob/main/INSTALL-FOR-AGENTS.md): agent deployment with Render + Turso API keys and one-time setup claim is the default (no server root key). The Deploy to Render button is the alternative for users who don't want to give an agent provider keys; local/self-managed installation requires an explicit user request.
 
 ## Establish the request
 
@@ -41,7 +41,9 @@ For installation, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/n
 - Keep signer URLs out of public logs; deliver each only to its intended signer.
 - Recognize that `NIMMARI_BASE_URL` is a client convention in this skill.
 - Use a provisioned regular database key; document requests act as its owner.
-- Public signup is disabled. Administrators bootstrap with the server root key
+- Public signup is disabled. Fresh hosted installs use `/api/setup/claim` to obtain
+  separate admin and regular keys; see the install runbook. Existing/local installations
+  can bootstrap with the server root key
   (`NIMMARI_API_KEY`): `POST /api/accounts {email,name,password?}`, then
   `POST /api/keys {name,ownerUserId,scope:"regular"}`. Store returned secrets privately.
 - Root account/key administration works without `NIMMARI_API_OWNER_ID`; root

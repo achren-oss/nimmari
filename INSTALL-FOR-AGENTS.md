@@ -1,143 +1,50 @@
 # Install Nimmari: runbook for AI agents
 
-The default is the **Deploy to Render button + Turso**, with no fork, provider API keys,
-or local Docker required. Use the prebuilt 1.3.0 image. Keep all credentials outside the
-repository. See AGENTS.md for real-document rules.
+## A. Default: Agent deploy with Render + Turso API keys
 
-## Step 0: generate a setup code and send one message
+Use the prebuilt 1.3.0 image, then bootstrap through its one-time setup claim.
+Keep credentials outside the repository. See AGENTS.md for real-document rules.
+For users who don't want to give an agent provider keys, use alternative B below.
 
-With tracing disabled, create a new private installation directory (inspect existing state
-instead of overwriting it):
+### Step 0: send ONE message requesting both keys, email and name
 
-```bash
-set +x
-umask 077
-INSTALL_DIR="$HOME/.config/nimmari"
-mkdir -p "$HOME/.config"
-mkdir "$INSTALL_DIR"
-export INSTALL_DIR
-openssl rand -hex 24 > "$INSTALL_DIR/setup-code"
-chmod 600 "$INSTALL_DIR/setup-code"
-```
-
-Read the code privately and send ONE message containing the generated 48-character code:
-
-> I'll finish Nimmari setup and make a silent synthetic test link, without signing.
-> 1. Open https://app.turso.tech and sign in with GitHub, Google, or email (free, no
-> card). Create a database with any name, for example nimmari. Copy its libsql:// URL
-> and create a read+write database token. Put these only in the Render form, not in chat.
-> 2. Open https://render.com/deploy?repo=https://github.com/achren-oss/nimmari and sign
-> in with GitHub, GitLab, Google, or email (free, no card). Fill DATABASE_URL,
-> DATABASE_AUTH_TOKEN and NIMMARI_SETUP_CODE=<generated code>, then click Deploy Blueprint.
-> 3. Paste back the https://...onrender.com service URL, plus the email and name for
-> the first account. The setup code becomes useless after I claim it, which is why
-> it is OK in this chat. Your database token is never shared with me.
-
-Wait for the URL and account details; never invent them. Do not request provider tokens.
-
-## Claim and protect the returned credentials
-
-Wait for GET /api/health to return JSON with status "ok". The first deployment takes a
-few minutes; allow up to ten minutes and inspect the dashboard on failure. Render sleeps
-after 15 minutes idle and a cold start takes about one minute. Use bounded HTTP timeouts.
-
-GET /api/setup/claim must report enabled:true and claimed:false. Set PUBLIC_URL,
-OWNER_EMAIL and OWNER_NAME from the user's reply, then run:
-
-```bash
-set +x
-export PUBLIC_URL OWNER_EMAIL OWNER_NAME
-python3 - <<'PY'
-import json, os, pathlib, shlex, urllib.request
-root = pathlib.Path(os.environ['INSTALL_DIR'])
-url = os.environ['PUBLIC_URL'].rstrip('/')
-body = dict(setupCode=(root/'setup-code').read_text().strip(),
-            email=os.environ['OWNER_EMAIL'], name=os.environ['OWNER_NAME'])
-request = urllib.request.Request(url+'/api/setup/claim', data=json.dumps(body).encode(),
-    headers={'Content-Type':'application/json'}, method='POST')
-with urllib.request.urlopen(request, timeout=120) as response:
-    assert response.status == 201
-    result = json.load(response)
-for filename, key in [('server-admin.env','adminKey'),('agent.env','agentKey')]:
-    path = root/filename
-    with path.open('x') as output:
-        output.write('NIMMARI_API_KEY='+shlex.quote(result[key]['key'])+'\n')
-        output.write('NIMMARI_BASE_URL='+shlex.quote(result['baseUrl'])+'\n')
-    path.chmod(0o600)
-path = root/'account-once.json'
-with path.open('x') as output:
-    json.dump(dict(result['account'], password=result['password']), output)
-path.chmod(0o600)
-(root/'setup-code').unlink()
-PY
-```
-
-Never print the claim response. Hand the password over once privately with the login URL
-and email, or have the user read account-once.json locally if no private channel exists.
-Remove that file after handoff. Keep server-admin.env securely for administration; load
-only agent.env into the document agent. A timeout may mean the claim succeeded: inspect
-GET state before retrying; plaintext credentials cannot be recovered.
-
-Install the portable skill and run the **same silent synthetic smoke test in steps 7–8
-below**, starting at “Install the portable skill”; load agent.env first. Use only the
-example.com signer, preview placement, verify emailSent:false, and never sign. Report
-the service/login URL, account email, private credential file locations, password
-handoff status, cold-start behavior, and synthetic link privately. No keys or password
-belong in the report. Keep the database token solely in Render.
-
-## Button-flow troubleshooting
-
-- Claim 404: missing/short code. Set NIMMARI_SETUP_CODE (32+ characters) in Render
-  dashboard Environment; saving redeploys the service.
-- Claim 410: already claimed. If not by you, treat the instance as compromised:
-  delete the service and database and redeploy.
-- Claim 409: an account already exists, so bootstrap is refused without consuming the
-  claim. Use existing administrator credentials; never silently replace accounts.
-- Claim 429: wait for the ten-minute window. Claim 503: inspect database availability.
-- Health failure: inspect Render logs privately; do not create duplicate services.
-
-## Honest hosting notes
-
-A Turso account is still needed: [Render Free](https://render.com/docs/free) has no
-persistent disk. Its free Postgres expires 30 days after creation and is deleted after
-a 14-day grace period. Nimmari supports only SQLite/libSQL; ephemeral SQLite would lose
-signed documents. Keep within free quotas.
-
-The [Deploy button](https://render.com/docs/deploy-to-render) works out of the box for
-public repositories according to Render's docs. Whether the dashboard asks to connect
-a Git provider has not been verified. The [Blueprint](https://render.com/docs/infrastructure-as-code)
-auto-syncs changes on the linked branch by default: changing its image tag updates
-instances. sync:false values are prompted only on initial creation.
-[RENDER_EXTERNAL_URL](https://render.com/docs/environment-variables) supplies the service
-URL automatically, so APP_URL and BETTER_AUTH_URL are unnecessary for this flow.
-
-## Alternative: agent-driven deploy via Render/Turso API keys
-
-The following existing API-key procedure remains available when explicitly chosen.
-Its numbered steps are independent of the button flow.
-
-## Free hosting facts (checked 14 October 2026)
-
-[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about one minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium. In a local container limited to 512 MB RAM and 0.1 CPU (`docker --memory 512m --cpus 0.1`), an HTML-form signing including Chromium rendering completed in about 18 s with about 116 MiB memory in use afterwards (measured 14 October 2026).
-
-[Turso Free](https://turso.tech/pricing) is $0, needs no card, and includes 100 databases, 5 GB storage, 500M rows read and 10M rows written per month. Signed PDFs live in the database. Stay within the free quotas; never enable paid resources automatically.
-
-Alternatives checked on the same date: [Fly.io](https://fly.io/docs/about/pricing/) has only a trial for new organizations, no ongoing free tier; [Koyeb](https://www.koyeb.com/docs/faqs/pricing) requires a card with a $29 verification hold for its free instance (since February 2026); [Railway Free](https://railway.com/pricing) provides $1/month credit and 0.5 GB RAM per service. Render + Turso is the default.
-
-## 0. One initial message: request only what the agent cannot obtain
-
-Tell the user:
-
-> I'll deploy Nimmari free on Render + Turso, create your first login and a separate agent key, install the document skill, and create a silent synthetic test link (example.com only; no email or signature). Please provide:
-> 1. A Render API key from Dashboard → Account Settings → API Keys. If needed, [create a free Render account](https://dashboard.render.com/register); no card needed.
-> 2. A Turso Platform API token from https://app.turso.tech → Settings → API Tokens (optional CLI: `turso auth api-tokens mint`). A free account needs no card. This is a Platform token, not a database token.
-> 3. Your email address and name for the first Nimmari account.
+> I'll deploy Nimmari on Render + Turso, create your login and separate admin/agent
+> keys, install the document skill, and make a silent synthetic test link (example.com;
+> no email or signature). Both providers have free tiers with no card required.
 >
-> Supply tokens through the agent's secret manager or environment variables `RENDER_API_KEY` and `TURSO_API_TOKEN`, never public chat. If a private paste is unavoidable, I will store it immediately in a chmod 600 file without echoing it.
+> **Turso Platform API token** (free account; GitHub, Google or email):
+> 1. Sign in at https://app.turso.tech.
+> 2. Click your avatar/initials top-right → **Platform API Tokens**.
+> 3. Create a token (any name, e.g. `nimmari-agent`; if asked, restrict it to your
+> organization) and copy it: it is shown only once. This is a **Platform API token**,
+> not a database token. CLI alternative: `turso auth api-tokens mint nimmari-agent --org <your-org>`.
+>
+> **Render API key** (free account; GitHub, GitLab, Google, Bitbucket or email):
+> 1. Open https://dashboard.render.com and sign in.
+> 2. Click your avatar top-right → **Account Settings**.
+> 3. In **API Keys**, click **Create API Key**, name it e.g. `nimmari-agent`, and copy
+> it: it is shown only once.
+>
+> Also provide your **email and name** for the Nimmari login. Hand keys through the
+> agent's secret manager or env vars `TURSO_API_TOKEN` and `RENDER_API_KEY` where
+> possible; private paste otherwise, stored immediately in chmod 600 files.
+> Both keys can be revoked afterwards in the same place. I recommend revoking them
+> after installation if you won't need agent administration later.
 
-Wait for these inputs. Never paste tokens into commands/transcripts, echo them, enable tracing, dump environment files, or print HTTP request/response bodies containing secrets. Private pasted credentials must be captured through a non-logged secret input into the protected file, not interpolated into shell command text. Ask again only for genuine ambiguity (multiple organizations/workspaces, existing resources) or missing inputs.
+Sources: [Render API](https://render.com/docs/api) (keys are managed from Account
+Settings), [Turso authentication](https://docs.turso.tech/api-reference/authentication),
+[CLI token minting](https://docs.turso.tech/cli/auth/api-tokens/mint).
+Dashboard menu labels checked on 15 October 2026 from provider docs/third-party guides
+([Render tutorial](https://render.com/tutorials/firstdeploy/install-skills-and-optional-mcp),
+[Turso setup guide](https://reachssh.com/sync/setup/));
+if labels differ, look for “API Keys”/“API Tokens” in account settings.
 
-## 1. Prerequisites and protected state
+Wait for these inputs; never invent the email or name. Never paste tokens into commands
+or transcripts, echo them, enable tracing, or dump secrets. Capture private pasted keys
+through non-logged secret input into protected files, never shell command text. Ask again
+only for missing inputs or genuine ambiguity about organizations, workspaces or resources.
+
+### 1. Prerequisites and protected state
 
 ```bash
 set +x
@@ -199,7 +106,7 @@ Read the protected metadata: Turso returns an array with `slug`, `name`, `type`;
 
 References: [Turso organizations](https://docs.turso.tech/api-reference/organizations/list), [Render owners](https://api-docs.render.com/reference/list-owners).
 
-## 2. Create the Turso database through the Platform API
+### 2. Create the Turso database through the Platform API
 
 ```bash
 set +x
@@ -237,20 +144,33 @@ On database 409, stop this block: inspect `GET $TURSO_ORG_URL/databases/nimmari`
 
 Official schemas: [create database](https://docs.turso.tech/api-reference/databases/create), [retrieve database](https://docs.turso.tech/api-reference/databases/retrieve), [database tokens](https://docs.turso.tech/api-reference/databases/create-token), [groups](https://docs.turso.tech/api-reference/groups/create), [locations](https://docs.turso.tech/api-reference/locations/list).
 
-## 3. Generate server secrets without printing
+### 3. Generate server secrets without printing
 
 ```bash
 set +x
 {
-  printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
-  printf 'NIMMARI_API_KEY=%s\n' "$(openssl rand -hex 32)"
+  printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 24)"
+  printf 'NIMMARI_SETUP_CODE=%s\n' "$(openssl rand -hex 24)"
 } >> "$SERVER_ENV"
 chmod 600 "$SERVER_ENV"
 ```
 
-Do this once. The root key provisions accounts and keys without `NIMMARI_API_OWNER_ID`. Never give the root key to the document agent.
+Do this once. No root `NIMMARI_API_KEY` goes into Render: setup claim creates revocable
+admin and regular database keys instead of a long-lived master key on the server.
+Copy the setup code privately for the shared claim step:
 
-## 4. Create the free Render image service
+```bash
+python3 - <<'PYCODE'
+import os, pathlib
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+env = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
+with (root/'setup-code').open('x') as output:
+    output.write(env['NIMMARI_SETUP_CODE'])
+(root/'setup-code').chmod(0o600)
+PYCODE
+```
+
+### 4. Create the free Render image service
 
 ```bash
 set +x
@@ -278,26 +198,24 @@ with (root / 'deployment.env').open('x') as f:
     for k, v in {'SERVICE_ID': s['id'], 'PUBLIC_URL': url, 'BASE_URL': url,
                  'RENDER_DASHBOARD_URL': s['dashboardUrl'], 'TURSO_ORG': os.environ['TURSO_ORG']}.items():
         f.write(k + '=' + shlex.quote(v) + '\n')
-with pathlib.Path(os.environ['SERVER_ENV']).open('a') as f:
-    f.write('BETTER_AUTH_URL=' + url + '\nAPP_URL=' + url + '\n')
-env = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
-(root / 'render-env.json').write_text(json.dumps([{'key': k, 'value': v} for k, v in env.items()]))
 PYRENDER
 set -a
 source "$INSTALL_DIR/deployment.env"
 set +a
-api render PUT "https://api.render.com/v1/services/$SERVICE_ID/env-vars" "$INSTALL_DIR/env-update.json" "$INSTALL_DIR/render-env.json"
-printf '{}\n' > "$INSTALL_DIR/deploy-request.json"
-api render POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" "$INSTALL_DIR/deploy.json" "$INSTALL_DIR/deploy-request.json"
 ```
 
-**PUT replaces every environment variable**, so include the full list: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `BETTER_AUTH_SECRET`, `NIMMARI_API_KEY`, `BETTER_AUTH_URL`, `APP_URL`. The last two must match the returned public URL. Render may append a suffix when a subdomain is taken; always use `service.serviceDetails.url`, never construct it from the name. On 409, inspect existing services before retrying with an unused name; never overwrite an existing deployment. Save the returned service ID and dashboard URL.
+The create payload contains only `DATABASE_URL`, `DATABASE_AUTH_TOKEN`,
+`BETTER_AUTH_SECRET`, and `NIMMARI_SETUP_CODE`. Render supplies `RENDER_EXTERNAL_URL`
+automatically; no `BETTER_AUTH_URL`/`APP_URL`, environment replacement, or second deploy
+is needed. Always take `PUBLIC_URL` from `service.serviceDetails.url`; Render may append
+a suffix. On 409 inspect existing services before retrying; never overwrite a deployment.
+Save the returned service ID and dashboard URL.
 
 [Dockerfile](Dockerfile) defaults `PORT=3000`; Render supplies its own `PORT`. [The entrypoint](scripts/docker-entrypoint.sh) runs migrations then `node server.js`, which reads that environment variable and binds `0.0.0.0`. Do not override Render's port or add a local database/disk. Chromium is bundled. No email provider is configured here.
 
-Official API: [create service](https://api-docs.render.com/reference/create-service), [replace environment variables](https://api-docs.render.com/reference/update-env-vars-for-service), [trigger deploy](https://api-docs.render.com/reference/create-deploy).
+Official API: [create service](https://api-docs.render.com/reference/create-service).
 
-## 5. Wait for deployment and health (up to about 10 minutes)
+### 5. Wait for deployment and health (up to about 10 minutes)
 
 ```bash
 set +x
@@ -323,60 +241,56 @@ done
 
 The first deploy pulls the image and runs migrations. Subsequent cold starts can take about a minute. Check [deploy status](https://api-docs.render.com/reference/list-deploys) as well as health so a failed deploy does not silently look successful. Preserve deployment state on a timeout; do not create another service.
 
-## 6. Provision the first account
+### 6. Claim the first account and protect credentials
 
-Use the email and name already supplied in step 0; never invent either. Set `OWNER_EMAIL` and `OWNER_NAME` privately in the shell. Public signup is disabled.
-
-```bash
-set +x
-export OWNER_EMAIL OWNER_NAME
-python3 - <<'PY'
-import json, os, pathlib, urllib.request
-root = pathlib.Path(os.environ['INSTALL_DIR'])
-secrets = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
-body = {'email': os.environ['OWNER_EMAIL'], 'name': os.environ['OWNER_NAME']}
-request = urllib.request.Request(os.environ['BASE_URL'] + '/api/accounts',
-    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['NIMMARI_API_KEY'],
-    'Content-Type': 'application/json'}, method='POST')
-with urllib.request.urlopen(request, timeout=90) as response:
-    assert response.status == 201
-    account = json.load(response)
-assert account['id'] and account['password']
-path = root / 'account-once.json'
-with path.open('x') as output:
-    json.dump(account, output)
-path.chmod(0o600)
-PY
-```
-
-Omitting `password` asks the server to generate it. Securely read `account-once.json` using a private, non-logged file viewer. Show its `password` to the user **once in a private channel**, with the login URL (`PUBLIC_URL/login`) and email. Tell them to store it in their password manager and change it through their account's supported password flow. Do not print the response to a shared terminal, transcript or final report. If no private delivery channel is available, have the user read the file locally; do not disclose it in public chat. Keep the file until password handoff and key provisioning succeed, then remove it.
-
-On an HTTP error, stop and inspect state before retrying: a timeout may occur after an account was created. A 409 means the email already exists; do not choose another person's address or silently replace credentials.
-
-## 7. Create and verify the regular agent key
+Set `OWNER_EMAIL` and `OWNER_NAME` privately from step 0. Public signup is disabled.
 
 ```bash
 set +x
+umask 077
+: "${PUBLIC_URL:?Set service URL first}"
+: "${OWNER_EMAIL:?Set user-supplied email first}"
+: "${OWNER_NAME:?Set user-supplied name first}"
+export PUBLIC_URL OWNER_EMAIL OWNER_NAME
 python3 - <<'PY'
 import json, os, pathlib, shlex, urllib.request
 root = pathlib.Path(os.environ['INSTALL_DIR'])
-account = json.loads((root / 'account-once.json').read_text())
-secrets = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
-body = {'name': 'Document agent', 'scope': 'regular', 'ownerUserId': account['id']}
-request = urllib.request.Request(os.environ['BASE_URL'] + '/api/keys',
-    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['NIMMARI_API_KEY'],
-    'Content-Type': 'application/json'}, method='POST')
-with urllib.request.urlopen(request, timeout=90) as response:
+url = os.environ['PUBLIC_URL'].rstrip('/')
+with urllib.request.urlopen(url+'/api/setup/claim', timeout=120) as response:
+    assert json.load(response) == {'enabled': True, 'claimed': False}
+body = dict(setupCode=(root/'setup-code').read_text().strip(),
+            email=os.environ['OWNER_EMAIL'], name=os.environ['OWNER_NAME'])
+request = urllib.request.Request(url+'/api/setup/claim', data=json.dumps(body).encode(),
+    headers={'Content-Type':'application/json'}, method='POST')
+with urllib.request.urlopen(request, timeout=120) as response:
     assert response.status == 201
-    key = json.load(response)
-assert key['key'] and key['scope'] == 'regular' and key['ownerUserId'] == account['id']
-path = root / 'agent.env'
+    result = json.load(response)
+for filename, key in [('server-admin.env','adminKey'),('agent.env','agentKey')]:
+    path = root/filename
+    with path.open('x') as output:
+        output.write('NIMMARI_API_KEY='+shlex.quote(result[key]['key'])+'\n')
+        output.write('NIMMARI_BASE_URL='+shlex.quote(result['baseUrl'])+'\n')
+    path.chmod(0o600)
+path = root/'account-once.json'
 with path.open('x') as output:
-    output.write('NIMMARI_API_KEY=' + shlex.quote(key['key']) + '\n')
-    output.write('NIMMARI_BASE_URL=' + shlex.quote(os.environ['PUBLIC_URL']) + '\n')
+    json.dump(dict(result['account'], password=result['password']), output)
 path.chmod(0o600)
-(root / 'agent-key-id.txt').write_text(key['id'] + '\n')
+(root/'setup-code').unlink()
 PY
+```
+
+Never print the claim response. Hand the password over once privately with the login URL
+and email, or have the user read account-once.json locally if no private channel exists.
+Remove that file after handoff. Keep server-admin.env securely for administration; load
+only agent.env into the document agent. A timeout may mean the claim succeeded: inspect
+GET state before retrying; plaintext credentials cannot be recovered.
+
+After claim, `NIMMARI_SETUP_CODE` can stay in Render: it is single-use. Removing it
+is optional hardening, not required for installation.
+
+### 7. Verify the regular key and install the skill
+
+```bash
 set +x
 set -a
 source "$INSTALL_DIR/agent.env"
@@ -388,9 +302,7 @@ code=$(printf 'Authorization: Bearer %s\n' "$NIMMARI_API_KEY" | \
 [ "$code" = 400 ] || { printf 'Expected HTTP 400, received %s\n' "$code"; exit 1; }
 ```
 
-`agent.env` holds only the regular owner-scoped key and the reachable instance URL. Load it into the agent's environment with tracing disabled. Do not source `server.env` into the document agent. If key creation times out, inspect key metadata before creating another key; plaintext is returned only at creation.
-
-### Install the portable skill
+#### Install the portable skill
 
 Use an existing repository clone, or shallow-clone the release (git is optional if the source is already available; otherwise download and unpack the v1.3.0 source archive with curl):
 
@@ -417,7 +329,7 @@ python3 skills/nimmari/scripts/nimmari_flow.py --help
 
 Read the installed `SKILL.md` before real document work. The helper requires `requests`; the requirements also install `pypdf`. Keep the source checkout for the following commands.
 
-## 8. Prepare a synthetic smoke test, preview, then send silently
+### 8. Prepare a synthetic smoke test, preview, then send silently
 
 Run this disposable synthetic test by default as part of the authorized installation; do not ask for another confirmation. It creates persistent test data with **one synthetic signer, `user-smoke@example.com`, and one signature line assigned to key `smoke`**. This is deliberate synthetic-test authorization, not permission to create fields on real documents without asking. Never use the owner's real email. The test is cancellable; never sign it for the user. Mention it in the final report.
 
@@ -481,9 +393,9 @@ PY
 
 The helper sets upload `notify="false"` and send `notify:false`; there is no `--notify` flag. `--prefill` is required even for an empty object. `--print-urls` includes the secret URL in the protected output file. Read that file privately and **return the signing URL to the user in chat**, identifying it as a synthetic test link. Never email it, publish it, or open it to fill, draw or submit a signature. If the helper fails, inspect document state before retrying; writes are not automatically retried.
 
-## 9. Cleanup and teardown — only on explicit user request
+### 9. Cleanup and teardown — only on explicit user request
 
-After private password handoff and key provisioning succeed, remove `account-once.json`. Keep `server.env`, `agent.env` and `deployment.env` securely backed up; never commit them. Remove transient `*.headers`, create/request JSON files, database-token responses and Render env payloads when no longer needed; they contain credentials. Keep provider credentials in the secret manager for future administration. Smoke output contains a secret signing link.
+After private password handoff and key provisioning succeed, remove `account-once.json`. Keep `server.env`, `server-admin.env`, `agent.env` and `deployment.env` securely backed up; never commit them. Remove transient `*.headers`, create/request JSON files, database-token responses and Render env payloads when no longer needed; they contain credentials. Recommend revoking the Render/Turso provider keys in the same settings used to create them unless future agent administration is wanted. This does not revoke the separate database token or Nimmari keys. Smoke output contains a secret signing link.
 
 To invalidate the synthetic test, only with explicit user authorization, call `POST /api/documents/{documentId}/cancel` with the regular agent key and optional `{"reason":"Installation smoke test cleanup"}`. Cancellation is terminal. Local file deletion does not invalidate links.
 
@@ -498,7 +410,7 @@ api turso DELETE "$TURSO_ORG_URL/databases/nimmari" "$INSTALL_DIR/turso-delete.j
 
 Deleting the service stops hosting; deleting the database permanently removes its accounts, documents and signatures. Confirm the saved identifiers refer to this installation. [Render deletion](https://api-docs.render.com/reference/delete-service), [Turso deletion](https://docs.turso.tech/api-reference/databases/delete).
 
-## 10. Final report
+### 10. Final report
 
 Never include keys, authentication secrets or passwords. Deliver the synthetic link only to the requesting user in chat:
 
@@ -506,7 +418,7 @@ Never include keys, authentication secrets or passwords. Deliver the synthetic l
 Nimmari URL: <PUBLIC_URL; login at /login>
 Cold start: sleeps after 15 minutes idle; allow about one minute to wake
 Account email: <user-supplied email>
-Secrets stored at: <absolute server.env and agent.env paths; private password handoff status>
+Secrets stored at: <absolute server.env, server-admin.env and agent.env paths; private password handoff status>
 Render service: <service ID> — <returned dashboardUrl>
 Turso database: nimmari (organization <slug>)
 Smoke-test link: <private synthetic URL; example.com signer; no emails sent>
@@ -515,17 +427,78 @@ Anything unclear: <unresolved choices/blockers, or None>
 
 ## Troubleshooting
 
+| Claim response | Action |
+| --- | --- |
+| 404 | Missing/short setup code: set `NIMMARI_SETUP_CODE` (32+ characters) in Render Environment and redeploy. |
+| 409 | Accounts already exist; use existing administrator credentials. Never replace them silently. |
+| 410 | Already claimed. If not by you, treat as compromised; arrange explicit authorization to delete and redeploy. |
+| 429 | Wait for the ten-minute rate-limit window. |
+| 403 / 503 | Check the setup code privately / inspect database and rate-limiter availability. |
+
 - **Render/Turso 401 or 403:** invalid/expired token or insufficient workspace/org access. Obtain a correct API credential privately; do not dump headers. Turso needs a Platform API token for provisioning.
 - **Render 402:** payment information required. Stop and report it. Do not add a card, select a paid plan, or silently move providers.
 - **Deploy failed:** open the saved Render dashboard URL and inspect logs privately; fetch service events with `GET /v1/services/{serviceId}/events` through `api`. Redact secrets before reporting. Check image tag, migrations and database connectivity. [Service events](https://api-docs.render.com/reference/list-events).
 - **Health timeout/cold start:** allow roughly a minute for waking and up to ten minutes for the first deploy; inspect deploy state and logs before extending the wait. Do not treat Render's loading HTML as healthy JSON.
 - **Turso group/location errors:** list groups and locations; use a returned location code. Free allows one group; reuse the existing group rather than trying to buy another. Inspect 409 conflicts and ownership before reuse. Do not overwrite a database.
-- **Nimmari 401:** use the regular owner-scoped key from `agent.env` for documents; ownerless root is only for administration. The missing-PDF authentication check must return 400.
+- **Nimmari 401:** use the regular owner-scoped key from `agent.env` for documents; keep `server-admin.env` for administration. The missing-PDF authentication check must return 400.
 - **Timeout during a write:** inspect saved metadata and remote state before retrying account, key, database, service or signing-session creation.
 
-## Only if the user explicitly asks for local or self-managed install
+## Free hosting facts and button behavior
 
-Skip hosted steps 0–5 only when the user requests this path. Ask for the first account email/name if missing. Run these tested Docker steps on the intended host, then continue with shared steps 6–8 and the final report (mark Render/Turso not applicable). No provider tokens are needed. Do not choose this path because the hosted setup has an unresolved error.
+[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about one minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium. In a local container limited to 512 MB RAM and 0.1 CPU (`docker --memory 512m --cpus 0.1`), an HTML-form signing including Chromium rendering completed in about 18 s with about 116 MiB memory in use afterwards (measured 14 October 2026).
+
+[Turso Free](https://turso.tech/pricing) is $0, needs no card, and includes 100 databases, 5 GB storage, 500M rows read and 10M rows written per month. Signed PDFs live in the database. Stay within the free quotas; never enable paid resources automatically.
+
+Alternatives checked on 14 October 2026: [Fly.io](https://fly.io/docs/about/pricing/) has only a trial for new organizations, no ongoing free tier; [Koyeb](https://www.koyeb.com/docs/faqs/pricing) requires a card with a $29 verification hold for its free instance (since February 2026); [Railway Free](https://railway.com/pricing) provides $1/month credit and 0.5 GB RAM per service. Render + Turso is the default.
+
+The [Deploy button](https://render.com/docs/deploy-to-render) works out of the box for
+public repositories according to Render's docs. Whether the dashboard asks to connect
+a Git provider has not been verified. The [Blueprint](https://render.com/docs/infrastructure-as-code)
+auto-syncs changes on the linked branch by default: changing its image tag updates
+instances. sync:false values are prompted only on initial creation.
+[RENDER_EXTERNAL_URL](https://render.com/docs/environment-variables) supplies the service
+URL automatically, so APP_URL and BETTER_AUTH_URL are unnecessary for this flow.
+
+## B. Alternative: No keys for the agent: Deploy to Render button
+
+For users who don't want to give an agent provider keys. This is an independent path:
+skip A's steps 0–5. Generate the code in a fresh private directory:
+
+```bash
+set +x
+set -euo pipefail
+umask 077
+INSTALL_DIR="$HOME/.config/nimmari"
+mkdir -p "$HOME/.config"
+mkdir "$INSTALL_DIR"
+export INSTALL_DIR
+openssl rand -hex 24 > "$INSTALL_DIR/setup-code"
+chmod 600 "$INSTALL_DIR/setup-code"
+```
+
+Send one message with the generated code:
+
+> 1. Sign in at https://app.turso.tech (GitHub, Google or email; free, no card).
+> Create a database, copy its libsql:// URL and create a read+write database token.
+> 2. Use the Deploy button below. Sign in to Render (free, no card), fill
+> DATABASE_URL, DATABASE_AUTH_TOKEN and NIMMARI_SETUP_CODE=<generated code>, then
+> click Deploy Blueprint. Put the database credentials only in Render.
+> 3. Return the service URL plus your email and name for the first Nimmari login.
+> I'll claim it and make a silent synthetic test link without signing.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/achren-oss/nimmari)
+
+No fork, local Docker or provider API keys are needed. Set and export `PUBLIC_URL`,
+`OWNER_EMAIL`, `OWNER_NAME` from the reply. Wait for `/api/health` JSON `status: "ok"`
+(up to ten minutes, bounded HTTP timeouts; inspect the dashboard on failure), then
+run A's **step 6** claim and **steps 7–8** skill/silent test, and provide the final
+report. Mark provider identifiers unavailable if not supplied. No `server.env` or
+`deployment.env` is needed for this path. Keep the database token solely in Render.
+See shared troubleshooting and hosting notes above.
+
+## C. Local/self-managed only on explicit request
+
+Skip hosted steps 0–5 only when the user requests this path. Ask for the first account email/name if missing. Run these tested Docker steps on the intended host, then run the local bootstrap below and shared steps 7–8 and the final report (mark Render/Turso not applicable). No provider tokens are needed. Do not choose this path because the hosted setup has an unresolved error.
 
 ```bash
 set +x
@@ -604,4 +577,75 @@ The image includes Chromium, runs migrations at startup, listens on container po
 
 Stop with `docker stop nimmari`, restart with `docker start nimmari`. `docker rm nimmari` on a stopped container preserves the named volume. Never delete `nimmari-data` without explicit permanent-deletion authorization. Inspect existing containers/secrets before repairing a partial install. For port conflicts choose another host `PORT`, update URLs and recreate the container with the same volume and secrets. Inspect `docker logs --tail 100 nimmari` privately; do not dump `docker inspect` environment values. For image-pull errors check the exact public tag and registry access before altering saved GHCR credentials.
 
-For a native install follow [README Quick start](README.md#quick-start), including Node/npm, Chromium, secret configuration and migrations, then return to steps 6–8. Do not pass Docker's `/data` path to native setup. Stale exported environment variables override `.env.local`; unset stale database/auth settings without printing their values.
+For a native install follow [README Quick start](README.md#quick-start), including Node/npm, Chromium, secret configuration and migrations, then run the local bootstrap below and shared steps 7–8. Do not pass Docker's `/data` path to native setup. Stale exported environment variables override `.env.local`; unset stale database/auth settings without printing their values.
+
+### Local account/key bootstrap (root-key path, unchanged)
+
+#### Provision the first account
+
+Use the email and name already supplied in step 0; never invent either. Set `OWNER_EMAIL` and `OWNER_NAME` privately in the shell. Public signup is disabled.
+
+```bash
+set +x
+export OWNER_EMAIL OWNER_NAME
+python3 - <<'PY'
+import json, os, pathlib, urllib.request
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+secrets = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
+body = {'email': os.environ['OWNER_EMAIL'], 'name': os.environ['OWNER_NAME']}
+request = urllib.request.Request(os.environ['BASE_URL'] + '/api/accounts',
+    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['NIMMARI_API_KEY'],
+    'Content-Type': 'application/json'}, method='POST')
+with urllib.request.urlopen(request, timeout=90) as response:
+    assert response.status == 201
+    account = json.load(response)
+assert account['id'] and account['password']
+path = root / 'account-once.json'
+with path.open('x') as output:
+    json.dump(account, output)
+path.chmod(0o600)
+PY
+```
+
+Omitting `password` asks the server to generate it. Securely read `account-once.json` using a private, non-logged file viewer. Show its `password` to the user **once in a private channel**, with the login URL (`PUBLIC_URL/login`) and email. Tell them to store it in their password manager and change it through their account's supported password flow. Do not print the response to a shared terminal, transcript or final report. If no private delivery channel is available, have the user read the file locally; do not disclose it in public chat. Keep the file until password handoff and key provisioning succeed, then remove it.
+
+On an HTTP error, stop and inspect state before retrying: a timeout may occur after an account was created. A 409 means the email already exists; do not choose another person's address or silently replace credentials.
+
+#### Create and verify the regular agent key
+
+```bash
+set +x
+python3 - <<'PY'
+import json, os, pathlib, shlex, urllib.request
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+account = json.loads((root / 'account-once.json').read_text())
+secrets = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
+body = {'name': 'Document agent', 'scope': 'regular', 'ownerUserId': account['id']}
+request = urllib.request.Request(os.environ['BASE_URL'] + '/api/keys',
+    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['NIMMARI_API_KEY'],
+    'Content-Type': 'application/json'}, method='POST')
+with urllib.request.urlopen(request, timeout=90) as response:
+    assert response.status == 201
+    key = json.load(response)
+assert key['key'] and key['scope'] == 'regular' and key['ownerUserId'] == account['id']
+path = root / 'agent.env'
+with path.open('x') as output:
+    output.write('NIMMARI_API_KEY=' + shlex.quote(key['key']) + '\n')
+    output.write('NIMMARI_BASE_URL=' + shlex.quote(os.environ['PUBLIC_URL']) + '\n')
+path.chmod(0o600)
+(root / 'agent-key-id.txt').write_text(key['id'] + '\n')
+PY
+set +x
+set -a
+source "$INSTALL_DIR/agent.env"
+set +a
+# README's authentication check: omit the required PDF, expect HTTP 400.
+code=$(printf 'Authorization: Bearer %s\n' "$NIMMARI_API_KEY" | \
+  curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  --request POST --header @- --form notify=false "$NIMMARI_BASE_URL/api/documents")
+[ "$code" = 400 ] || { printf 'Expected HTTP 400, received %s\n' "$code"; exit 1; }
+```
+
+`agent.env` holds only the regular owner-scoped key and the reachable instance URL. Load it into the agent's environment with tracing disabled. Do not source `server.env` into the document agent. If key creation times out, inspect key metadata before creating another key; plaintext is returned only at creation.
+
+Continue with shared steps 7–8 and the final report above.

@@ -1,5 +1,9 @@
 # Nimmari
 
+**AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)** — default: agent deploy with Render + Turso API keys, then one-time setup claim (no server root key).
+
+**No keys for the agent:** alternative for users who don't want to give an agent provider keys.
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/achren-oss/nimmari)
 
 > Formerly Puumerkki. Not related to [solita/puumerkki](https://github.com/solita/puumerkki).
@@ -7,8 +11,6 @@
 [![CI](https://github.com/achren-oss/nimmari/actions/workflows/ci.yml/badge.svg)](https://github.com/achren-oss/nimmari/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Image: ghcr.io/achren-oss/nimmari](https://img.shields.io/badge/image-ghcr.io%2Fachren-oss%2Fnimmari-2496ED?logo=docker&logoColor=white)](https://github.com/achren-oss/nimmari/pkgs/container/nimmari)
-
-**AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)** — deploys free on Render + Turso by default.
 
 > **Signatures:** Nimmari produces eIDAS *Simple* Electronic Signatures (SES) only, not AdES/QES. See [Legal disclaimer](#legal-disclaimer).
 

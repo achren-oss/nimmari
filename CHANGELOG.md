@@ -2,6 +2,12 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Docs
+
+- Restore agent deployment with Render + Turso API keys as the default, with one-message credential instructions and one-time setup claim instead of a hosted root key. Keep the Deploy button as the no-provider-keys alternative and preserve explicit local setup.
+
 ## [1.3.0] - 2026-10-15
 
 ### Added

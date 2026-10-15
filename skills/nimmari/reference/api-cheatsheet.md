@@ -1,10 +1,10 @@
-# Puumerkki HTTP API cheatsheet
+# Nimmari HTTP API cheatsheet
 
-Use `PUUMERKKI_BASE_URL` as the client instance URL and
-`Authorization: Bearer $PUUMERKKI_API_KEY` for owner routes.
+Use `NIMMARI_BASE_URL` as the client instance URL and
+`Authorization: Bearer $NIMMARI_API_KEY` for owner routes.
 Use a provisioned regular database key on the client. The server root
-`PUUMERKKI_API_KEY` needs `PUUMERKKI_API_OWNER_ID` only for document requests.
-`PUUMERKKI_BASE_URL` is not a server environment variable; server signing links
+`NIMMARI_API_KEY` needs `NIMMARI_API_OWNER_ID` only for document requests.
+`NIMMARI_BASE_URL` is not a server environment variable; server signing links
 use `APP_URL` (fallback `http://localhost:3000`). Never log the key.
 
 ## Routes and bodies
@@ -48,10 +48,10 @@ appearances or remove controls that would obscure overlays before uploading.
   Requires `pypdf`; repeat `--skip-prefix PREFIX` or `--private NAME=signerKey`.
   Native widget values/appearances are removed, not baked in. Assign imported signature boxes to signers and add missing boxes
   manually; review layout and required flags before upload.
-- `scripts/puumerkki_flow.py PDF --title TITLE --fields fields.json --prefill prefill.json
+- `scripts/nimmari_flow.py PDF --title TITLE --fields fields.json --prefill prefill.json
   --signers signers.json --no-send` prepares a draft and prints `documentId` and
   `prefilledCheck`. Verify the fetched fields, assignments and layout before send.
-- `scripts/puumerkki_flow.py --send-only DOC_ID --signers signers.json` sends an
+- `scripts/nimmari_flow.py --send-only DOC_ID --signers signers.json` sends an
   existing draft. URLs are omitted unless `--print-urls`; capture that output privately.
   Send output includes `fieldNames` (server ID -> local name), signer identities and expiry.
 - `scripts/test_sign.py test-flow.json --values values.json --signature synthetic.png`
@@ -62,7 +62,7 @@ appearances or remove controls that would obscure overlays before uploading.
 
 ## PDF fields and coordinates
 
-Example fields file for `puumerkki_flow.py`:
+Example fields file for `nimmari_flow.py`:
 
 ```json
 {
@@ -263,7 +263,7 @@ Always poll owner GET until `completed` and validate the signed PDF download:
 python3 scripts/fetch_signed_pdf.py DOC_ID final.pdf --timeout 300
 ```
 
-The helper uses `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` from the
+The helper uses `NIMMARI_BASE_URL` and `NIMMARI_API_KEY` from the
 environment for owner Bearer authentication, without printing the key. It polls
 `GET /api/documents/{id}` (`--poll-interval` defaults to 2 seconds), then downloads
 `/api/documents/{id}/pdf?signed=1`. PDF responses send `Content-Length`,
@@ -290,7 +290,7 @@ Seals list signer emails and signed times, document ID, and a **shortened** SHA-
 marker (`first 8 hex…last 4 hex`). The PDF hash covers the original upload bytes;
 HTML hashes sanitized HTML. Preserve/hash the original yourself if you need the
 full 64-hex digest. This audit marker is not a cryptographic PDF digital signature.
-Timestamps use per-upload `auditTimezone`, then `PUUMERKKI_AUDIT_TIMEZONE`, then
+Timestamps use per-upload `auditTimezone`, then `NIMMARI_AUDIT_TIMEZONE`, then
 `Europe/Helsinki`; invalid IANA zones fall back to Europe/Helsinki.
 
 ## Webhooks
@@ -298,7 +298,7 @@ Timestamps use per-upload `auditTimezone`, then `PUUMERKKI_AUDIT_TIMEZONE`, then
 Public HTTP(S) only; private/local/metadata destinations are blocked by URL checks.
 Delivery is one best-effort POST, timeout 10 seconds, no retry. Status changes do
 not roll back on failure. Also poll authenticated owner GET, stopping at terminal status.
-When `PUUMERKKI_WEBHOOK_SECRET` is configured, `X-Puumerkki-Signature` is lowercase
+When `NIMMARI_WEBHOOK_SECRET` is configured, `X-Puumerkki-Signature` is lowercase
 64-character HMAC-SHA256 hex over the exact JSON body, with no `sha256=` prefix.
 Use raw bytes and constant-time comparison **before** JSON parsing.
 Without a configured secret no signature header is sent. Configure a secret for
@@ -358,9 +358,9 @@ Public signup is disabled, including `POST /api/auth/sign-up/email` and implicit
 provider signup. Existing accounts still log in with email/password. Signing links
 (`/sign/{token}` and `/api/sign/...`) require no account.
 
-Use `Authorization: Bearer <key>`. The server's `PUUMERKKI_API_KEY` root
+Use `Authorization: Bearer <key>`. The server's `NIMMARI_API_KEY` root
 key has admin scope. Root document requests
-act as `PUUMERKKI_API_OWNER_ID`; without that owner, only account/key administration
+act as `NIMMARI_API_OWNER_ID`; without that owner, only account/key administration
 is available. Database keys act on their owner's documents regardless of scope;
 admin scope grants account/key administration, not access to other owners' documents.
 All account/key endpoints require API keys: session cookies return 403. Missing,
@@ -373,7 +373,7 @@ Timestamps are ISO strings. `disabled` means `user.disabled_at` is non-null;
 disabled accounts cannot log in and their existing server sessions are ignored.
 
 `DELETE /api/accounts/{id}` requires an admin or root key. Unknown IDs return
-404. The configured `PUUMERKKI_API_OWNER_ID`, the caller's own key owner, and
+404. The configured `NIMMARI_API_OWNER_ID`, the caller's own key owner, and
 accounts owning any documents return 409 with `{error}`. Documents are never
 deleted. Success returns `{ok:true,id}` after one transaction revokes the owner's
 keys, deletes sessions and credentials, and deletes the user. Revoked key rows
@@ -398,7 +398,7 @@ the Drizzle journal and runs once. This adds no public account-disable endpoint.
    Success is 201 with `{id,name,scope,ownerUserId,prefix,createdAt,key}`.
    Store `key` securely: its plaintext is returned only on creation.
 4. Give the agent that regular key for document operations. Keep the root key
-   for administration. Optionally set `PUUMERKKI_API_OWNER_ID` to the new account
+   for administration. Optionally set `NIMMARI_API_OWNER_ID` to the new account
    ID if the root key should also act on that account's documents.
 
 `scope` defaults to `regular`; `ownerUserId` defaults to the caller's owner.

@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import hmac
 import json
-import os
+from env import nimmari_env
 from pathlib import Path
 import re
 import sys
@@ -23,9 +23,9 @@ def main():
     parser.add_argument("body", type=Path, help="File containing exact raw HTTP body bytes")
     parser.add_argument("--signature", required=True, help="X-Puumerkki-Signature header value")
     args = parser.parse_args()
-    secret = os.environ.get("PUUMERKKI_WEBHOOK_SECRET", "")
+    secret = nimmari_env("WEBHOOK_SECRET")
     if not secret:
-        parser.error("Set PUUMERKKI_WEBHOOK_SECRET to the same secret configured on the instance")
+        parser.error("Set NIMMARI_WEBHOOK_SECRET to the same secret configured on the instance")
     raw = args.body.read_bytes()
     if not verify_signature(raw, args.signature, secret):
         print("Invalid webhook signature", file=sys.stderr)

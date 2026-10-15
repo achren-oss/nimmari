@@ -36,15 +36,15 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/achren-oss/puumerkki
+          images: ghcr.io/achren-oss/nimmari
           tags: |
             type=semver,pattern={{version}},value=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
             type=semver,pattern={{major}}.{{minor}},value=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
             type=raw,value=latest
           labels: |
-            org.opencontainers.image.title=Puumerkki
+            org.opencontainers.image.title=Nimmari
             org.opencontainers.image.description=Headless, self-hosted e-signature service
-            org.opencontainers.image.source=https://github.com/achren-oss/puumerkki
+            org.opencontainers.image.source=https://github.com/achren-oss/nimmari
             org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.vendor=Big Blue Games Oy
       - uses: docker/build-push-action@v6

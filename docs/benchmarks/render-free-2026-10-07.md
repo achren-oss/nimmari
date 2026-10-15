@@ -29,10 +29,10 @@ On Render, Chromium first failed to launch with `chrome_crashpad_handler: --data
 `scripts/bench.sh` times a cold `/api/health` request, then runs N times (default 5): upload HTML → create signing session → sign (renders the PDF) → fetch the signed PDF and check it is a valid PDF.
 
 ```sh
-BASE_URL=https://your-service.onrender.com PUUMERKKI_API_KEY=... RUNS=5 scripts/bench.sh
+BASE_URL=https://your-service.onrender.com NIMMARI_API_KEY=... RUNS=5 scripts/bench.sh
 ```
 
-The server needs `PUUMERKKI_API_KEY` and `PUUMERKKI_API_OWNER_ID` set. Create the owner with `scripts/create-service-user.mjs`.
+The server needs `NIMMARI_API_KEY` and `NIMMARI_API_OWNER_ID` set. Create the owner with `scripts/create-service-user.mjs`.
 
 ## Recommendation
 The free plan is fine for evaluation and the tutorial videos. For regular use, choose the cheapest paid instance. Clients can pre-warm the service by calling `/api/health` when the UI opens.

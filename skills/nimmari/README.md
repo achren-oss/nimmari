@@ -1,26 +1,26 @@
-# Puumerkki skill
+# Nimmari skill
 
-An agent-agnostic skill for Puumerkki's HTTP e-signature API. Read
+An agent-agnostic skill for Nimmari's HTTP e-signature API. Read
 [SKILL.md](SKILL.md) for the workflow and [API cheatsheet](reference/api-cheatsheet.md)
 for schemas and implementation details. No agent vendor or connector is required.
 
 Install Python 3 and run `python3 -m pip install -r requirements.txt`. Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides PDF rendering and text checks for `scripts/render_check.sh`.
-Set `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` through your environment or
-secret manager. Use a provisioned regular database key on the client. Administrators configure the server root `PUUMERKKI_API_KEY` and provision accounts and keys as described in the [API cheatsheet](reference/api-cheatsheet.md#accounts-and-api-keys). Root document access additionally requires `PUUMERKKI_API_OWNER_ID`. Never print
-or commit keys. The Python clients accept `PUUMERKKI_BOT_API_KEY` as a deprecated fallback when `PUUMERKKI_API_KEY` is empty or unset. Use the field, prefill, and signer JSON examples in the cheatsheet,
+Set `NIMMARI_BASE_URL` and `NIMMARI_API_KEY` through your environment or
+secret manager. Use a provisioned regular database key on the client. Administrators configure the server root `NIMMARI_API_KEY` and provision accounts and keys as described in the [API cheatsheet](reference/api-cheatsheet.md#accounts-and-api-keys). Root document access additionally requires `NIMMARI_API_OWNER_ID`. Never print
+or commit keys. The Python clients accept `NIMMARI_BOT_API_KEY` as a deprecated fallback when `NIMMARI_API_KEY` is empty or unset. Use the field, prefill, and signer JSON examples in the cheatsheet,
 adapting them to your document.
 
 ```sh
 python3 scripts/acroform_to_fields.py form.pdf --output-dir /tmp/new-form \
   --skip-prefix witness --private national_id=party
 # Review fields.json and manually add assigned signature boxes.
-python3 scripts/puumerkki_flow.py /tmp/new-form/flattened.pdf --title Agreement \
+python3 scripts/nimmari_flow.py /tmp/new-form/flattened.pdf --title Agreement \
   --fields /tmp/new-form/fields.json --prefill prefill.json --signers signers.json \
   --no-send > draft.json
 # Verify prefilledCheck, assignments and layout before sending the documentId.
-python3 scripts/puumerkki_flow.py --send-only DOC_ID --signers signers.json
+python3 scripts/nimmari_flow.py --send-only DOC_ID --signers signers.json
 # For a disposable example.com test, capture links privately with --print-urls:
-python3 scripts/puumerkki_flow.py --send-only TEST_DOC_ID --signers test-signers.json \
+python3 scripts/nimmari_flow.py --send-only TEST_DOC_ID --signers test-signers.json \
   --print-urls > test-flow.json
 python3 scripts/test_sign.py test-flow.json --values test-values.json --signature synthetic.png
 python3 scripts/fetch_signed_pdf.py TEST_DOC_ID final.pdf --timeout 300
@@ -52,8 +52,10 @@ polling limit (default 300 seconds); `--poll-interval` defaults to 2 seconds.
 Never trust the first byte stream: an immediate fetch after the last signer POST
 returned an 8 KB truncated PDF without a trailer, while a later refetch was valid.
 
-The webhook example reads `PUUMERKKI_WEBHOOK_SECRET` and verifies untouched raw
+The webhook example reads `NIMMARI_WEBHOOK_SECRET` and verifies untouched raw
 body bytes; import `verify_signature` into your HTTP receiver before parsing JSON.
 The render helper prints extracted document text: run it privately, then open all
-PNGs. Puumerkki supplies simple drawn/email-link signatures, and completed PDFs
+PNGs. Nimmari supplies simple drawn/email-link signatures, and completed PDFs
 show private values in full to all parties. Review the skill's limits before use.
+
+Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.

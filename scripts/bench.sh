@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Puumerkki latency bench (Render free tier test).
+# Nimmari latency bench (Render free tier test).
 # Usage: BASE_URL=https://<your-service>.onrender.com ./bench.sh
-# Needs: PUUMERKKI_API_KEY in the environment (optionally from $BENCH_ENV_FILE).
-# Server side must have PUUMERKKI_API_KEY (same value) and PUUMERKKI_API_OWNER_ID set,
+# Needs: NIMMARI_API_KEY in the environment (optionally from $BENCH_ENV_FILE).
+# Server side must have NIMMARI_API_KEY (same value) and NIMMARI_API_OWNER_ID set,
 # where the owner id is an existing user row created by:
 #   DATABASE_URL=libsql://... DATABASE_AUTH_TOKEN=... \
 #     node scripts/create-service-user.mjs bench@example.com "Bench"
@@ -11,10 +11,11 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 [ -n "${BENCH_ENV_FILE:-}" ] && set -a && . "$BENCH_ENV_FILE" && set +a
-: "${BASE_URL:?set BASE_URL}"; : "${PUUMERKKI_API_KEY:?set PUUMERKKI_API_KEY}"
+NIMMARI_API_KEY="${NIMMARI_API_KEY-${PUUMERKKI_API_KEY-}}"
+: "${BASE_URL:?set BASE_URL}"; : "${NIMMARI_API_KEY:?set NIMMARI_API_KEY}"
 BASE_URL="${BASE_URL%/}"; RUNS="${RUNS:-5}"
 FIXTURE="${FIXTURE:-$DIR/fixtures/sample-form.html}"
-AUTH=(-H "Authorization: Bearer $PUUMERKKI_API_KEY")
+AUTH=(-H "Authorization: Bearer $NIMMARI_API_KEY")
 SIG="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII="
 VALUES='{"client_name":"Bench Client","start_date":"2026-10-07","scope":"Line one.\nLine two.","date":"2026-10-07"}'
 TMP=$(mktemp); PDF=$(mktemp); trap 'rm -f "$TMP" "$PDF"' EXIT

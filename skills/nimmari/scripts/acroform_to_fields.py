@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove native form controls and export Puumerkki overlays (requires pypdf)."""
+"""Remove native form controls and export Nimmari overlays (requires pypdf)."""
 import argparse
 import json
 import math

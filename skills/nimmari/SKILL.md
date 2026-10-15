@@ -1,9 +1,9 @@
 ---
-name: puumerkki
-description: Prepare, prefill, send, monitor, and verify Puumerkki e-signature documents through its HTTP API, using PDF overlays or annotated HTML forms.
+name: nimmari
+description: Nimmari (formerly Puumerkki) self-hosted e-signature; use when asked to install Nimmari, prepare/send documents for signature.
 ---
 
-# Use Puumerkki through HTTP
+# Use Nimmari through HTTP
 
 Use this skill with any agent capable of HTTP requests and document inspection.
 Read [reference/api-cheatsheet.md](reference/api-cheatsheet.md) for request schemas,
@@ -31,18 +31,18 @@ Use the deployed instance's matching source when its version differs from this r
 
 ## Configure access
 
-- Read `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` from the environment.
+- Read `NIMMARI_BASE_URL` and `NIMMARI_API_KEY` from the environment.
 - Set the base URL to the intended instance, without a trailing slash.
 - Send `Authorization: Bearer <key>` to owner API routes.
 - Never print, embed in examples, or expose the key in logs or request dumps.
 - Use HTTPS for a remote instance; use HTTP only for an intended local/test setup.
 - Keep signer URLs out of public logs; deliver each only to its intended signer.
-- Recognize that `PUUMERKKI_BASE_URL` is a client convention in this skill.
+- Recognize that `NIMMARI_BASE_URL` is a client convention in this skill.
 - Use a provisioned regular database key; document requests act as its owner.
 - Public signup is disabled. Administrators bootstrap with the server root key
-  (`PUUMERKKI_API_KEY`): `POST /api/accounts {email,name,password?}`, then
+  (`NIMMARI_API_KEY`): `POST /api/accounts {email,name,password?}`, then
   `POST /api/keys {name,ownerUserId,scope:"regular"}`. Store returned secrets privately.
-- Root account/key administration works without `PUUMERKKI_API_OWNER_ID`; root
+- Root account/key administration works without `NIMMARI_API_OWNER_ID`; root
   document requests require it. Admin database keys still access only their owner's documents.
 - Account/key endpoints require bearer keys and reject session cookies. Regular
   keys can create regular keys and list/revoke keys for their own owner only.
@@ -89,11 +89,11 @@ conversions and layout. **Assign imported signature boxes to signers and add mis
 - Use multipart `importAcroForm="true"` only when its conversions fit the form.
 - Inspect `importedFields`, `errors`, and `warnings`, then fetch the document.
 - Expect radio groups and dropdowns to import as text fields, not choice controls.
-- Prefer reading widget rectangles and building explicit Puumerkki fields yourself
+- Prefer reading widget rectangles and building explicit Nimmari fields yourself
   when role assignment, radios, or precise layout matters.
 - Record rectangles before stripping the source PDF's widgets/buttons.
 - Flatten retained appearances or remove unwanted widgets/buttons before upload,
-  so native controls do not render over the Puumerkki values or signatures.
+  so native controls do not render over the Nimmari values or signatures.
 - Preserve printed labels; verify flattening did not bake unwanted values into the source.
 - Do not assume `importAcroForm` itself removes or flattens native widgets.
 
@@ -141,7 +141,7 @@ conversions and layout. **Assign imported signature boxes to signers and add mis
 Follow **draft -> verify -> send**. Create without sending:
 
 ```sh
-python3 scripts/puumerkki_flow.py flattened.pdf --title Agreement \
+python3 scripts/nimmari_flow.py flattened.pdf --title Agreement \
   --fields fields.json --prefill prefill.json --signers signers.json --no-send > draft.json
 ```
 
@@ -152,7 +152,7 @@ source and overlays before sending; an automatic prefill check does not verify l
 After verification, send that existing draft:
 
 ```sh
-python3 scripts/puumerkki_flow.py --send-only DOC_ID --signers signers.json
+python3 scripts/nimmari_flow.py --send-only DOC_ID --signers signers.json
 ```
 
 Use `--print-urls` only to capture links privately for delivery or a disposable test;
@@ -249,7 +249,7 @@ notification setting. No helper retries mutations automatically.
 ## Receive webhooks
 
 - Set a public HTTP(S) `webhookUrl` at upload when asynchronous updates are needed.
-- Configure `PUUMERKKI_WEBHOOK_SECRET` on the server and receiving service.
+- Configure `NIMMARI_WEBHOOK_SECRET` on the server and receiving service.
 - Verify `X-Puumerkki-Signature` as HMAC-SHA256 hex over the **raw body bytes**.
 - Use `scripts/verify_webhook.py` as a constant-time verification example.
 - Verify before parsing JSON; reject missing or malformed signatures when a secret is required.
@@ -267,7 +267,7 @@ Timestamps are ISO strings. `disabled` means `user.disabled_at` is non-null;
 disabled accounts cannot log in and their existing server sessions are ignored.
 
 `DELETE /api/accounts/{id}` requires an admin or root key. Unknown IDs return
-404. The configured `PUUMERKKI_API_OWNER_ID`, the caller's own key owner, and
+404. The configured `NIMMARI_API_OWNER_ID`, the caller's own key owner, and
 accounts owning any documents return 409 with `{error}`. Documents are never
 deleted. Success returns `{ok:true,id}` after one transaction revokes the owner's
 keys, deletes sessions and credentials, and deletes the user. Revoked key rows
@@ -277,3 +277,5 @@ session authentication return 403 for both operations.
 Apply `drizzle/0006_account_disabled.sql` before deploying with
 `node --env-file=.env.local scripts/migrate.mjs`. The migration is registered in
 the Drizzle journal and runs once. This adds no public account-disable endpoint.
+
+Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.

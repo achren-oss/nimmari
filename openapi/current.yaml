@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
-  title: Puumerkki implemented API
+  title: Nimmari implemented API
   version: 1.0.0+unreleased
   description: Implemented unversioned routes. Owner-scoped database bearer keys or Better Auth
     sessions for documents. Account/key management requires bearer keys; root/admin can
-    provision accounts. Public signup is disabled. Root PUUMERKKI_API_KEY can bootstrap
-    without PUUMERKKI_API_OWNER_ID, but root document requests require that owner.
+    provision accounts. Public signup is disabled. Root NIMMARI_API_KEY can bootstrap
+    without NIMMARI_API_OWNER_ID, but root document requests require that owner.
     Admin database keys access only their owner's documents; signer tokens are secret capabilities. SES drawn signatures only. Proposed
     /v1 routes are documented separately in v1.yaml.
   license:
@@ -492,7 +492,7 @@ paths:
                   format: uri
                 auditTimezone: &id004
                   type: string
-                  description: IANA timezone; overrides PUUMERKKI_AUDIT_TIMEZONE (default
+                  description: IANA timezone; overrides NIMMARI_AUDIT_TIMEZONE (default
                     Europe/Helsinki).
                 pdf:
                   type: string
@@ -1201,8 +1201,8 @@ paths:
 components:
   securitySchemes:
     ownerBearer:
-      description: Server root PUUMERKKI_API_KEY or active owner-scoped database key.
-        Root document requests require PUUMERKKI_API_OWNER_ID. Invalid bearer
+      description: Server root NIMMARI_API_KEY or active owner-scoped database key.
+        Root document requests require NIMMARI_API_OWNER_ID. Invalid bearer
         credentials never fall back to session cookies.
       type: http
       scheme: bearer
@@ -1562,5 +1562,5 @@ x-webhook-events:
   - document.cancelled
   - document.declined
   description: Best-effort POST to upload webhookUrl. Optional X-Puumerkki-Signature
-    is lowercase hex HMAC-SHA256 of exact raw body bytes with PUUMERKKI_WEBHOOK_SECRET.
+    is lowercase hex HMAC-SHA256 of exact raw body bytes with NIMMARI_WEBHOOK_SECRET.
     No durable retries or subscription API.

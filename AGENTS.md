@@ -1,12 +1,12 @@
-# Guidance for AI agents using Puumerkki
+# Guidance for AI agents using Nimmari
 
 Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md).
 
 This file is for AI agents (assistants, bots, automation) that use a
-Puumerkki instance's HTTP API for a person. For contributing to the code, see
+Nimmari instance's HTTP API for a person. For contributing to the code, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Puumerkki produces simple electronic signatures (SES). A signature collected
+Nimmari produces simple electronic signatures (SES). A signature collected
 from the wrong person, or put on the wrong line, can't be undone by the API.
 Follow these rules.
 
@@ -16,9 +16,9 @@ Public signup is disabled, including `POST /api/auth/sign-up/email` and implicit
 provider signup. Existing accounts still log in with email/password. Signing links
 (`/sign/{token}` and `/api/sign/...`) require no account.
 
-Use `Authorization: Bearer <key>`. The server's `PUUMERKKI_API_KEY` root
+Use `Authorization: Bearer <key>`. The server's `NIMMARI_API_KEY` root
 key has admin scope. Root document requests
-act as `PUUMERKKI_API_OWNER_ID`; without that owner, only account/key administration
+act as `NIMMARI_API_OWNER_ID`; without that owner, only account/key administration
 is available. Database keys act on their owner's documents regardless of scope;
 admin scope grants account/key administration, not access to other owners' documents.
 All account/key endpoints require API keys: session cookies return 403. Missing,
@@ -31,7 +31,7 @@ Timestamps are ISO strings. `disabled` means `user.disabled_at` is non-null;
 disabled accounts cannot log in and their existing server sessions are ignored.
 
 `DELETE /api/accounts/{id}` requires an admin or root key. Unknown IDs return
-404. The configured `PUUMERKKI_API_OWNER_ID`, the caller's own key owner, and
+404. The configured `NIMMARI_API_OWNER_ID`, the caller's own key owner, and
 accounts owning any documents return 409 with `{error}`. Documents are never
 deleted. Success returns `{ok:true,id}` after one transaction revokes the owner's
 keys, deletes sessions and credentials, and deletes the user. Revoked key rows
@@ -56,7 +56,7 @@ the Drizzle journal and runs once. This adds no public account-disable endpoint.
    Success is 201 with `{id,name,scope,ownerUserId,prefix,createdAt,key}`.
    Store `key` securely: its plaintext is returned only on creation.
 4. Give the agent that regular key for document operations. Keep the root key
-   for administration. Optionally set `PUUMERKKI_API_OWNER_ID` to the new account
+   for administration. Optionally set `NIMMARI_API_OWNER_ID` to the new account
    ID if the root key should also act on that account's documents.
 
 `scope` defaults to `regular`; `ownerUserId` defaults to the caller's owner.
@@ -119,7 +119,7 @@ Machine-readable API: [OpenAPI](openapi/current.yaml).
 
 ## Photo-to-link flow
 
-A user photographs a paper form and says "put this in Puumerkki, I'll sign":
+A user photographs a paper form and says "put this in Nimmari, I'll sign":
 
 1. Turn the photo into a one-page PDF (crop and straighten it first if
    needed), e.g. `img2pdf photo.jpg -o form.pdf`.
@@ -144,8 +144,8 @@ A user photographs a paper form and says "put this in Puumerkki, I'll sign":
    `GET /api/documents/[id]` and fetch the result with
    `GET /api/documents/[id]/pdf?signed=1` once `status` is `completed`.
 
-Authenticate with `Authorization: Bearer <PUUMERKKI_API_KEY>`. A database key acts as its owner; the root environment key acts as
-`PUUMERKKI_API_OWNER_ID` for document requests. Both reach only that owner's documents. See the [API table in the README](README.md#current-api).
+Authenticate with `Authorization: Bearer <NIMMARI_API_KEY>`. A database key acts as its owner; the root environment key acts as
+`NIMMARI_API_OWNER_ID` for document requests. Both reach only that owner's documents. See the [API table in the README](README.md#current-api).
 
 ## Lifecycle, notifications, and signer slots
 
@@ -171,12 +171,14 @@ Authenticate with `Authorization: Bearer <PUUMERKKI_API_KEY>`. A database key ac
 - `GET /api/sign/{token}` exposes the slot's `signerKey` and permitted fields.
   PDF submissions use field IDs; HTML submissions use field names. Do not open
   links to fill or submit on a real person's behalf.
-- Upload `auditTimezone` overrides `PUUMERKKI_AUDIT_TIMEZONE` (default
+- Upload `auditTimezone` overrides `NIMMARI_AUDIT_TIMEZONE` (default
   `Europe/Helsinki`). Webhooks report `document.completed`, `document.cancelled`,
   and `document.declined`; verify HMAC when a webhook secret is configured.
 
-See [the portable agent skill](skills/puumerkki/SKILL.md), its
-[API reference](skills/puumerkki/reference/api-cheatsheet.md), and the
+See [the portable agent skill](skills/nimmari/SKILL.md), its
+[API reference](skills/nimmari/reference/api-cheatsheet.md), and the
 [implemented API OpenAPI contract](openapi/current.yaml). The skill uses client
-variables `PUUMERKKI_BASE_URL` and `PUUMERKKI_API_KEY` (a provisioned regular key for document work). Disposable synthetic tests are separate from
+variables `NIMMARI_BASE_URL` and `NIMMARI_API_KEY` (a provisioned regular key for document work). Disposable synthetic tests are separate from
 real signing and require deliberate test authorization.
+
+Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.

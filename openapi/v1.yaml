@@ -1,6 +1,6 @@
 openapi: "3.1.0"
 info:
-  title: "Puumerkki Headless API"
+  title: "Nimmari Headless API"
   version: "1.0.0-draft"
   description: "Proposed self-hosted headless API v1; not yet implemented. Implemented unversioned routes (including cancel, decline, signer keys and notify) are specified separately in current.yaml. eIDAS SES only. PAdES and RFC 3161 are planned for v1.1. Keys select workspace and live/test mode. All collections use limit/starting_after and data/has_more. Bearer API-key scopes are documented per operation (HTTP bearer security schemes do not express scopes). See docs/api-v1-design.md for lifecycle, evidence and migration decisions."
   license:
@@ -9,10 +9,10 @@ info:
 servers:
   -
     url: "{origin}"
-    description: "Your self-hosted Puumerkki deployment."
+    description: "Your self-hosted Nimmari deployment."
     variables:
       origin:
-        default: "https://puumerkki.your-domain.tld"
+        default: "https://nimmari.your-domain.tld"
         description: "Public origin of your deployment (scheme and host, no trailing slash)."
 tags:
   -

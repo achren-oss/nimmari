@@ -3,7 +3,7 @@
 import argparse
 import base64
 import json
-import os
+from env import nimmari_env
 from pathlib import Path
 import sys
 from urllib.parse import quote, urlsplit
@@ -27,7 +27,7 @@ def main():
             not isinstance(s.get('email'), str) or not s['email'].lower().endswith('@example.com') for s in signers):
         print('Refused: all signer emails must end with @example.com, or use --i-know-this-is-a-test.', file=sys.stderr)
         return 1
-    base = os.environ.get('PUUMERKKI_BASE_URL', '').rstrip('/')
+    base = nimmari_env("BASE_URL").rstrip('/')
     parsed = urlsplit(base)
     if parsed.scheme not in ('http', 'https') or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError()

@@ -28,7 +28,7 @@ try {
   } else {
     console.log("Service user already exists.");
   }
-  console.log(`PUUMERKKI_API_OWNER_ID=${id}`);
+  console.log(`NIMMARI_API_OWNER_ID=${id}`);
 } finally {
   client.close();
 }

@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-15
+
+- Rename the app, repository, and Docker image to Nimmari (formerly Puumerkki).
+- Introduce `NIMMARI_*` configuration with deprecated `PUUMERKKI_*` fallback aliases.
+- Move the portable skill to `skills/nimmari` and rename its flow script to `nimmari_flow.py`.
+- Preserve existing keys, stored identifiers, and databases. Docker reuses the legacy database on existing volumes; new installs use `/data/nimmari.db`.
+- Upgrade: change the image to `ghcr.io/achren-oss/nimmari:1.2.0`, retain the existing volume, and update installed skill paths. Existing environment variables continue to work. See [upgrade guide](docs/release-notes-v1.2.0.md).
+
+
 ### Added
 - Self-contained AI-agent installation runbook covering Docker setup, private secret handling, account and regular-key provisioning, skill installation, and a silent synthetic signing-link smoke test.
 
@@ -76,8 +85,10 @@ First open-source release under AGPL-3.0-only.
 ### Notes
 - Signatures are eIDAS Simple Electronic Signatures (SES). PAdES and trusted timestamps remain future work.
 
-[1.0.0]: https://github.com/achren-oss/puumerkki/releases/tag/v1.0.0
+[1.0.0]: https://github.com/achren-oss/nimmari/releases/tag/v1.0.0
 
-[1.1.0]: https://github.com/achren-oss/puumerkki/releases/tag/v1.1.0
+[1.1.0]: https://github.com/achren-oss/nimmari/releases/tag/v1.1.0
 
-[1.1.1]: https://github.com/achren-oss/puumerkki/releases/tag/v1.1.1
+[1.1.1]: https://github.com/achren-oss/nimmari/releases/tag/v1.1.1
+
+[1.2.0]: https://github.com/achren-oss/nimmari/releases/tag/v1.2.0

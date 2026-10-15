@@ -1,6 +1,6 @@
-# Install Puumerkki: runbook for AI agents
+# Install Nimmari: runbook for AI agents
 
-Use this runbook when a user asks you to install Puumerkki. Run the Bash blocks in order in the same shell on the Docker host. This installs version 1.1.1, provisions a real login and a separate regular agent key, and prepares a disposable signing link. Do not sign or fill anything for the user. See [AGENTS.md](AGENTS.md) for real-document rules.
+Use this runbook when a user asks you to install Nimmari. Run the Bash blocks in order in the same shell on the Docker host. This installs version 1.2.0, provisions a real login and a separate regular agent key, and prepares a disposable signing link. Do not sign or fill anything for the user. See [AGENTS.md](AGENTS.md) for real-document rules.
 
 ## 1. Check prerequisites and choose URLs
 
@@ -37,28 +37,28 @@ Keep secrets outside the repository. Do not enable tracing, use `echo`, dump env
 ```bash
 set +x
 umask 077
-INSTALL_DIR="$HOME/.config/puumerkki"
+INSTALL_DIR="$HOME/.config/nimmari"
 mkdir -p "$HOME/.config"
 mkdir "$INSTALL_DIR"
 SERVER_ENV="$INSTALL_DIR/server.env"
 export INSTALL_DIR SERVER_ENV
 {
   printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
-  printf 'PUUMERKKI_API_KEY=%s\n' "$(openssl rand -hex 32)"
+  printf 'NIMMARI_API_KEY=%s\n' "$(openssl rand -hex 32)"
 } > "$SERVER_ENV"
 chmod 600 "$SERVER_ENV"
 ```
 
-`server.env` contains the authentication secret and root administration key. The root does not need `PUUMERKKI_API_OWNER_ID` for account/key provisioning. Never give the root key to the document agent.
+`server.env` contains the authentication secret and root administration key. The root does not need `NIMMARI_API_OWNER_ID` for account/key provisioning. Never give the root key to the document agent.
 
 ## 3. Start Docker and wait for health
 
 ```bash
-docker run -d --name puumerkki --restart unless-stopped \
-  -p "$PORT:3000" -v puumerkki-data:/data \
+docker run -d --name nimmari --restart unless-stopped \
+  -p "$PORT:3000" -v nimmari-data:/data \
   --env-file "$SERVER_ENV" \
   -e BETTER_AUTH_URL="$PUBLIC_URL" -e APP_URL="$PUBLIC_URL" \
-  ghcr.io/achren-oss/puumerkki:1.1.1
+  ghcr.io/achren-oss/nimmari:1.2.0
 
 healthy=false
 for attempt in {1..60}; do
@@ -71,10 +71,10 @@ for attempt in {1..60}; do
   fi
   sleep 2
 done
-[ "$healthy" = true ] || { printf 'Health check failed; inspect docker logs puumerkki\n'; exit 1; }
+[ "$healthy" = true ] || { printf 'Health check failed; inspect docker logs nimmari\n'; exit 1; }
 ```
 
-The image includes Chromium, runs migrations at startup, listens on container port 3000, and defaults to SQLite at `/data/puumerkki.db`. The named volume persists accounts, documents and signatures across container replacement. No email provider is configured by these commands.
+The image includes Chromium, runs migrations at startup, listens on container port 3000, and defaults to SQLite at `/data/nimmari.db` (reusing `/data/puumerkki.db` when the new file is absent). The named volume persists accounts, documents and signatures across container replacement. No email provider is configured by these commands.
 
 ## 4. Ask for the user's account details, then provision
 
@@ -90,7 +90,7 @@ root = pathlib.Path(os.environ['INSTALL_DIR'])
 secrets = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
 body = {'email': os.environ['OWNER_EMAIL'], 'name': os.environ['OWNER_NAME']}
 request = urllib.request.Request(os.environ['BASE_URL'] + '/api/accounts',
-    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['PUUMERKKI_API_KEY'],
+    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['NIMMARI_API_KEY'],
     'Content-Type': 'application/json'}, method='POST')
 with urllib.request.urlopen(request, timeout=90) as response:
     assert response.status == 201
@@ -117,7 +117,7 @@ account = json.loads((root / 'account-once.json').read_text())
 secrets = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
 body = {'name': 'Document agent', 'scope': 'regular', 'ownerUserId': account['id']}
 request = urllib.request.Request(os.environ['BASE_URL'] + '/api/keys',
-    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['PUUMERKKI_API_KEY'],
+    data=json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + secrets['NIMMARI_API_KEY'],
     'Content-Type': 'application/json'}, method='POST')
 with urllib.request.urlopen(request, timeout=90) as response:
     assert response.status == 201
@@ -125,8 +125,8 @@ with urllib.request.urlopen(request, timeout=90) as response:
 assert key['key'] and key['scope'] == 'regular' and key['ownerUserId'] == account['id']
 path = root / 'agent.env'
 with path.open('x') as output:
-    output.write('PUUMERKKI_API_KEY=' + shlex.quote(key['key']) + '\n')
-    output.write('PUUMERKKI_BASE_URL=' + shlex.quote(os.environ['PUBLIC_URL']) + '\n')
+    output.write('NIMMARI_API_KEY=' + shlex.quote(key['key']) + '\n')
+    output.write('NIMMARI_BASE_URL=' + shlex.quote(os.environ['PUBLIC_URL']) + '\n')
 path.chmod(0o600)
 (root / 'agent-key-id.txt').write_text(key['id'] + '\n')
 PY
@@ -135,9 +135,9 @@ set -a
 source "$INSTALL_DIR/agent.env"
 set +a
 # README's authentication check: omit the required PDF, expect HTTP 400.
-code=$(printf 'Authorization: Bearer %s\n' "$PUUMERKKI_API_KEY" | \
+code=$(printf 'Authorization: Bearer %s\n' "$NIMMARI_API_KEY" | \
   curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-  --request POST --header @- --form notify=false "$PUUMERKKI_BASE_URL/api/documents")
+  --request POST --header @- --form notify=false "$NIMMARI_BASE_URL/api/documents")
 [ "$code" = 400 ] || { printf 'Expected HTTP 400, received %s\n' "$code"; exit 1; }
 ```
 
@@ -149,7 +149,7 @@ Use an existing repository clone, or download one into a new directory:
 
 ```bash
 # Skip this clone/cd pair when already in the repository.
-git clone --depth 1 https://github.com/achren-oss/puumerkki "$INSTALL_DIR/source"
+git clone --depth 1 https://github.com/achren-oss/nimmari "$INSTALL_DIR/source"
 cd "$INSTALL_DIR/source"
 ```
 
@@ -158,12 +158,12 @@ Copy the entire skill into your agent's skill directory. This example uses Codex
 ```bash
 SKILLS_DIR="$HOME/.codex/skills"
 mkdir -p "$SKILLS_DIR"
-[ ! -e "$SKILLS_DIR/puumerkki" ]
-cp -R skills/puumerkki "$SKILLS_DIR/puumerkki"
+[ ! -e "$SKILLS_DIR/nimmari" ]
+cp -R skills/nimmari "$SKILLS_DIR/nimmari"
 python3 -m venv "$INSTALL_DIR/venv"
 source "$INSTALL_DIR/venv/bin/activate"
-python3 -m pip install -r skills/puumerkki/requirements.txt
-python3 skills/puumerkki/scripts/puumerkki_flow.py --help
+python3 -m pip install -r skills/nimmari/requirements.txt
+python3 skills/nimmari/scripts/nimmari_flow.py --help
 ```
 
 Read the installed `SKILL.md` before real document work. The helper requires `requests`; the requirements also install `pypdf`. Keep the source checkout for the following commands.
@@ -181,7 +181,7 @@ export SMOKE_DIR
 python3 - <<'PY'
 import json, os, pathlib
 out = pathlib.Path(os.environ['SMOKE_DIR'])
-stream = b'BT /F1 20 Tf 72 680 Td (Puumerkki disposable smoke test) Tj ET\n72 480 m 372 480 l S\n'
+stream = b'BT /F1 20 Tf 72 680 Td (Nimmari disposable smoke test) Tj ET\n72 480 m 372 480 l S\n'
 objects = [b'<< /Type /Catalog /Pages 2 0 R >>',
     b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
@@ -214,7 +214,7 @@ pdftoppm -singlefile -png -scale-to-x 800 -scale-to-y -1 \
 Open `placement.svg` in an image viewer/browser supporting its adjacent `page.png` (or draw the JSON rectangle on `page.png` with your image tools). **Visually inspect the rendered page and overlay**: the red signature box must sit above and end at the only signature line. Do not send until you have viewed it. Install Poppler or report the blocker if rendering is unavailable.
 
 ```bash
-python3 skills/puumerkki/scripts/puumerkki_flow.py "$SMOKE_DIR/smoke.pdf" \
+python3 skills/nimmari/scripts/nimmari_flow.py "$SMOKE_DIR/smoke.pdf" \
   --title 'Disposable installation smoke test' \
   --fields "$SMOKE_DIR/fields.json" --prefill "$SMOKE_DIR/prefill.json" \
   --signers "$SMOKE_DIR/signers.json" --print-urls > "$SMOKE_DIR/result.json"
@@ -234,17 +234,17 @@ The helper sets upload `notify="false"` and send `notify:false`; there is no `--
 
 After private password handoff and key provisioning, remove `account-once.json`. Keep `server.env`, `agent.env`, and the named volume securely backed up; never commit them. Smoke files include a secret link; remove them when no longer needed. To invalidate an outstanding test link, obtain explicit authorization and cancel its document with `POST /api/documents/{documentId}/cancel` using the regular key and optional JSON `{"reason":"Installation smoke test cleanup"}`. Cancellation is terminal. Local file deletion alone does not invalidate links or remove server data.
 
-To stop the service: `docker stop puumerkki`; restart with `docker start puumerkki`. Removing a stopped container with `docker rm puumerkki` preserves the named volume. Do not delete `puumerkki-data` unless the user explicitly requests permanent data deletion.
+To stop the service: `docker stop nimmari`; restart with `docker start nimmari`. Removing a stopped container with `docker rm nimmari` preserves the named volume. Do not delete `nimmari-data` unless the user explicitly requests permanent data deletion.
 
 Without Docker, follow [README Quick start](README.md#quick-start), including Node/npm, Chromium, secret configuration and migrations, then return to account provisioning here. Do not pass the Docker-only `/data` database path to the native setup.
 
 ## Troubleshooting
 
 - **Port in use:** select another `PORT`, update local URLs, and recreate the failed container after inspecting its state. If the public origin changes, recreate with matching `BETTER_AUTH_URL` and `APP_URL`; preserve the volume and secrets.
-- **Health not ok:** inspect `docker ps -a` and `docker logs --tail 100 puumerkki` privately for migration, database permissions or startup errors. Do not dump `docker inspect` environment values. Check the local port and public proxy separately.
+- **Health not ok:** inspect `docker ps -a` and `docker logs --tail 100 nimmari` privately for migration, database permissions or startup errors. Do not dump `docker inspect` environment values. Check the local port and public proxy separately.
 - **401:** wrong, missing or revoked key, or missing owner configuration. Use `agent.env` for documents; an ownerless root key is for administration. The README check must return 400, not 401.
-- **Shell environment overrides `.env.local`:** for native installs, stale exported variables take precedence in Node/Next.js. Unset stale `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `PUUMERKKI_API_KEY` and related settings before loading the intended file. Do not print their values while diagnosing.
-- **Image pull unauthorized:** verify the exact public image/tag `ghcr.io/achren-oss/puumerkki:1.1.1` and registry connectivity. Stale GHCR credentials may interfere; inspect your registry setup and use `docker logout ghcr.io` only if discarding that host's saved login is appropriate. If authentication is required, use an authorized token with package-read access via `docker login ghcr.io --password-stdin`; never paste tokens into command arguments or logs.
+- **Shell environment overrides `.env.local`:** for native installs, stale exported variables take precedence in Node/Next.js. Unset stale `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `NIMMARI_API_KEY` and related settings before loading the intended file. Do not print their values while diagnosing.
+- **Image pull unauthorized:** verify the exact public image/tag `ghcr.io/achren-oss/nimmari:1.2.0` and registry connectivity. Stale GHCR credentials may interfere; inspect your registry setup and use `docker logout ghcr.io` only if discarding that host's saved login is appropriate. If authentication is required, use an authorized token with package-read access via `docker login ghcr.io --password-stdin`; never paste tokens into command arguments or logs.
 - **Container name already exists:** inspect the existing container first. Do not overwrite an existing deployment or its secrets while trying to repair a partial install.
 
 ## Final report
@@ -252,7 +252,7 @@ Without Docker, follow [README Quick start](README.md#quick-start), including No
 Fill this template; never include keys, authentication secrets or the generated password:
 
 ```text
-Puumerkki URL: <public URL>
+Nimmari URL: <public URL>
 Account email: <user-supplied email>
 Secrets stored at: <absolute server.env and agent.env paths; password handoff/storage status, no values>
 Smoke-test link: <private synthetic signing URL, or skipped/blocked and why>

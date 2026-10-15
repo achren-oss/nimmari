@@ -15,7 +15,8 @@ EMAIL="smoke-$TS@example.com"
 SIG="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII="
 
 # Admin provisioning replaces disabled public signup. Do not enable shell tracing.
-ROOT_KEY="${PUUMERKKI_API_KEY:-}"
+NIMMARI_API_KEY="${NIMMARI_API_KEY-${PUUMERKKI_API_KEY-}}"
+ROOT_KEY="${NIMMARI_API_KEY:-}"
 if [[ -z "$ROOT_KEY" ]]; then
   echo "A root API key is required for smoke account provisioning" >&2
   exit 1

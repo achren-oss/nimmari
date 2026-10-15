@@ -5,7 +5,7 @@ import math
 import hashlib
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-import os
+from env import nimmari_env
 from pathlib import Path
 import shutil
 import subprocess
@@ -112,9 +112,9 @@ def main():
     parser.add_argument('--poll-interval', type=positive_seconds, default=2,
                         help='Seconds between status checks (default: 2)')
     args = parser.parse_args()
-    # PUUMERKKI_BOT_API_KEY is a deprecated fallback; prefer PUUMERKKI_API_KEY.
-    base = os.environ.get('PUUMERKKI_BASE_URL', '').rstrip('/')
-    key = (os.environ.get('PUUMERKKI_API_KEY') or os.environ.get('PUUMERKKI_BOT_API_KEY', ''))
+    # NIMMARI_BOT_API_KEY is a deprecated fallback; prefer NIMMARI_API_KEY.
+    base = nimmari_env("BASE_URL").rstrip('/')
+    key = (nimmari_env("API_KEY") or nimmari_env("BOT_API_KEY"))
     parsed = urlsplit(base)
     if (parsed.scheme not in ('http', 'https') or not parsed.netloc or parsed.username
             or parsed.password or parsed.query or parsed.fragment or not key
@@ -132,7 +132,7 @@ if __name__ == '__main__':
     except RuntimeError as error:
         # Only fixed local messages; never emit bodies, URLs, headers or the key.
         message = str(error)
-        key = (os.environ.get('PUUMERKKI_API_KEY') or os.environ.get('PUUMERKKI_BOT_API_KEY'))
+        key = (nimmari_env("API_KEY") or nimmari_env("BOT_API_KEY"))
         print(message.replace(key, '[redacted]') if key else message, file=sys.stderr)
         sys.exit(1)
     except (requests.RequestException, ValueError, OSError, KeyError, TypeError):

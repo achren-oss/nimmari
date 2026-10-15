@@ -11,7 +11,7 @@ with owner bearer authentication, required and multiline fields, date fields,
 unvalidated `hetu` text, private PDF viewer masking, sequential invitations,
 notification controls, combined audit seals and per-document timezones.
 See [the current OpenAPI contract](../openapi/current.yaml) and
-[the API reference](../skills/puumerkki/reference/api-cheatsheet.md).
+[the API reference](../skills/nimmari/reference/api-cheatsheet.md).
 
 `POST /api/documents/{id}/send` accepts `signers` with unique `key` and optional
 zero-based `order`. Fields use `assignedSignerKey`, falling back to
@@ -33,10 +33,10 @@ transaction and version checks, preserving signatures and one audit seal.
 
 Upload `notify="false"` suppresses all document emails. Send `notify:false`
 suppresses invitations and follow-ups for those slots; signed notices still use
-the document flag. Upload `auditTimezone` overrides `PUUMERKKI_AUDIT_TIMEZONE`
+the document flag. Upload `auditTimezone` overrides `NIMMARI_AUDIT_TIMEZONE`
 (default `Europe/Helsinki`). Outbound `document.completed`, `document.cancelled`,
 and `document.declined` webhooks are best effort, optionally HMAC-signed with
-`PUUMERKKI_WEBHOOK_SECRET`; they are not the durable v1 outbox proposed below.
+`NIMMARI_WEBHOOK_SECRET`; they are not the durable v1 outbox proposed below.
 
 OSS schema changes use numbered additive SQL migrations `0001`–`0004` after
 `0000_init`, registered in `drizzle/meta/_journal.json`. The existing
@@ -142,7 +142,7 @@ Always recheck authentication/scopes before replay; revoked keys cannot replay. 
 
 Every collection uses `limit` (default 20, range 1–100), `starting_after` (last resource ID), and `{data: [...], has_more: boolean}`. Sort immutable `(created_at, id)` ascending; events by sequence; children also have creation timestamps. The cursor must belong to the same workspace, mode, parent and filter, or return 400. Deleted resource cursor lookup uses retained cursor metadata for 24 hours; older/unavailable cursor returns 400. A list is not a snapshot; insertion after the cursor may appear later. Repeat filters on each page; take the last returned ID only when has_more is true.
 
-Use [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html), which supersedes RFC 7807, with `application/problem+json`: `type`, `title`, `status`, `detail`, `instance`, plus `code`, `request_id`, optional `errors` (JSON pointers and messages). Resolve stable type URIs against the deployment origin, e.g. `https://puumerkki.your-domain.tld/problems/invalid-request`. Publish human-readable problem pages. Codes/types: invalid-request (400), unauthorized (401), insufficient-scope (403), not-found (404), state-conflict / idempotency-conflict / idempotency-in-progress / one-time-result-unavailable (409), token-expired (410, signing UI only), payload-too-large (413), unsupported-media-type (415), validation-failed (422), rate-limited (429), internal-error (500), temporarily-unavailable (503). Hide cross-workspace existence as 404. Never disclose secrets, SQL or stack traces. Responses include X-Request-Id; 401 includes WWW-Authenticate; 429/503 include Retry-After when retryable.
+Use [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html), which supersedes RFC 7807, with `application/problem+json`: `type`, `title`, `status`, `detail`, `instance`, plus `code`, `request_id`, optional `errors` (JSON pointers and messages). Resolve stable type URIs against the deployment origin, e.g. `https://nimmari.your-domain.tld/problems/invalid-request`. Publish human-readable problem pages. Codes/types: invalid-request (400), unauthorized (401), insufficient-scope (403), not-found (404), state-conflict / idempotency-conflict / idempotency-in-progress / one-time-result-unavailable (409), token-expired (410, signing UI only), payload-too-large (413), unsupported-media-type (415), validation-failed (422), rate-limited (429), internal-error (500), temporarily-unavailable (503). Hide cross-workspace existence as 404. Never disclose secrets, SQL or stack traces. Responses include X-Request-Id; 401 includes WWW-Authenticate; 429/503 include Retry-After when retryable.
 
 ## Versioning and rate limits
 
@@ -196,4 +196,4 @@ Roll out new tables/indexes first, verified backfill second, and shared business
 
 ## Contract references
 
-The draft uses the [OpenAPI 3.1 specification](https://spec.openapis.org/oas/v3.1.0.html), including its top-level webhooks object. Operational values above are proposed Puumerkki defaults, not requirements of those standards.
+The draft uses the [OpenAPI 3.1 specification](https://spec.openapis.org/oas/v3.1.0.html), including its top-level webhooks object. Operational values above are proposed Nimmari defaults, not requirements of those standards.

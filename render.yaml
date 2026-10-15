@@ -1,38 +1,24 @@
-# Render Blueprint for Nimmari (Docker web service + external Turso database).
-# Docs: docs/deploy-render.md
+# Prebuilt public image; no fork, build, or registry credentials required.
+# Blueprints auto-sync pushes to render.yaml on the linked branch by default:
+# https://render.com/docs/infrastructure-as-code
+# Changing this image tag updates deployed instances.
+# sync:false values are prompted only at initial creation.
 services:
   - type: web
     name: nimmari
-    runtime: docker
+    runtime: image
+    image:
+      url: ghcr.io/achren-oss/nimmari:1.3.0
     plan: free
     region: frankfurt
-    dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
-    autoDeploy: true
+    numInstances: 1
     envVars:
-      # Turso database URL, e.g. libsql://nimmari-<org>.turso.io
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_AUTH_TOKEN
         sync: false
-      # Random 32+ byte secret for session signing.
       - key: BETTER_AUTH_SECRET
         generateValue: true
-      # Public HTTPS origin of this service, e.g. https://<your-service>.onrender.com
-      # or your custom domain. Set both after the first deploy.
-      - key: BETTER_AUTH_URL
-        sync: false
-      - key: APP_URL
-        sync: false
-      # Optional: service-account API access.
-      - key: NIMMARI_API_KEY
-        sync: false
-      - key: NIMMARI_API_OWNER_ID
-        sync: false
-      # Optional: email delivery via Resend (leave empty to share links manually).
-      - key: RESEND_API_KEY
-        sync: false
-      - key: RESEND_FROM
-        sync: false
-      - key: RESEND_WEBHOOK_SECRET
+      - key: NIMMARI_SETUP_CODE
         sync: false

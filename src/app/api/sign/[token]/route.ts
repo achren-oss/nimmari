@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { nimmariEnv } from "@/lib/env";
 import { clientIp, rateLimitIpDebugHeaders } from "@/lib/client-ip";
 import { fieldMatchesSigner } from "@/lib/signer-assignment";
@@ -310,13 +311,13 @@ export async function POST(
     })),
   );
   if (nextSigner && (nextSigner.inviteEmailEnabled ?? true)) {
-    const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+    const publicUrl = appUrl();
     await sendSigningEmail({
       to: nextSigner.recipientEmail,
       recipientName: nextSigner.recipientName ?? undefined,
       senderName: "Nimmari",
       documentTitle: doc.title,
-      url: `${appUrl}/sign/${nextSigner.token}`,
+      url: `${publicUrl}/sign/${nextSigner.token}`,
       signingSessionId: nextSigner.id,
     });
   }
@@ -386,9 +387,9 @@ async function sendSignedNotices(args: {
   const [owner] = await db.select().from(user).where(eq(user.id, args.ownerId));
   if (!owner) return unsent;
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const recipientPdfUrl = `${appUrl}/api/sign/${args.signingToken}/pdf`;
-  const ownerPdfUrl = `${appUrl}/api/documents/${args.documentId}/pdf?signed=1`;
+  const publicUrl = appUrl();
+  const recipientPdfUrl = `${publicUrl}/api/sign/${args.signingToken}/pdf`;
+  const ownerPdfUrl = `${publicUrl}/api/documents/${args.documentId}/pdf?signed=1`;
   const resend = new Resend(apiKey);
   const who = args.recipientName
     ? `${args.recipientName} (${args.recipientEmail})`
@@ -417,7 +418,7 @@ async function sendSignedNotices(args: {
       html: `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1d2839;">
   <p>${who} just signed <strong>${title}</strong>.</p>
   ${button(ownerPdfUrl, "View signed PDF →")}
-  <p style="color:#5a4a31;font-size:13px;">Or open the document in Nimmari: <a href="${appUrl}/documents/${args.documentId}" style="color:#5a4a31;">${appUrl}/documents/${args.documentId}</a></p>
+  <p style="color:#5a4a31;font-size:13px;">Or open the document in Nimmari: <a href="${publicUrl}/documents/${args.documentId}" style="color:#5a4a31;">${publicUrl}/documents/${args.documentId}</a></p>
 </div>`,
     }),
   ]);

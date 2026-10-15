@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { writeTransaction } from "@/lib/write-transaction";
 import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
@@ -93,7 +94,7 @@ export async function POST(
     const sessionId = created.sessions![index].id;
     const t = created.sessions![index].token;
 
-    const url = `${process.env.APP_URL ?? "http://localhost:3000"}/sign/${t}`;
+    const url = `${appUrl()}/sign/${t}`;
     const invitedNow = shouldInviteOnSend(
       { email: signer.email, name: signer.name, order: signer.order ?? null },
       signers.map((s) => ({ email: s.email, name: s.name, order: s.order ?? null })),

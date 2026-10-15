@@ -1,6 +1,6 @@
 # Guidance for AI agents using Nimmari
 
-Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md): free hosted Render + Turso by default; local/self-managed only when explicitly requested.
+Installing a fresh instance? Start with [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md): Deploy to Render button + Turso with one-time setup claim by default; local/self-managed only when explicitly requested.
 
 This file is for AI agents (assistants, bots, automation) that use a
 Nimmari instance's HTTP API for a person. For contributing to the code, see
@@ -182,3 +182,19 @@ variables `NIMMARI_BASE_URL` and `NIMMARI_API_KEY` (a provisioned regular key fo
 real signing and require deliberate test authorization.
 
 Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.
+
+## One-time setup claim
+
+No bearer authentication is required. All responses use Cache-Control: no-store.
+Configure NIMMARI_SETUP_CODE (or deprecated PUUMERKKI_SETUP_CODE), at least 32 characters.
+GET /api/setup/claim returns only {enabled:boolean,claimed:boolean}.
+POST /api/setup/claim accepts {setupCode,email,name,password?}. On 201 it returns
+{account:{id,email,name},password?,adminKey:{id,key,scope},agentKey:{id,key,scope},baseUrl}.
+The generated password is returned only when omitted in the request. Keys are returned once;
+store them privately. The admin key administers all accounts/keys; the regular key acts on
+its owner's documents. Both store only hashes and retain the pmk_ prefix.
+Errors: 404 disabled/missing/short code, 403 wrong code, 410 {error:"already_claimed"},
+409 existing account, 400 invalid account input, 429 after 10 attempts per IP per
+10-minute fixed window, 503 if the rate limiter cannot safely check.
+Claim, account, credential and key writes share one transaction; failures roll back.
+Apply journaled migration 0008_setup_claim.sql before deployment.

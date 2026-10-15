@@ -49,7 +49,7 @@ it("hashes all bucket keys and cleans up old windows opportunistically", async (
   const rows = await database.select().from(schema.rateLimitBucket);
   expect(rows[0].key).toMatch(/^[a-f0-9]{64}$/);
   expect(rows[0].key).not.toContain("192.0.2.1");
-  await limiter.check("current", 1, 180000);
+  await limiter.check("current", 1, 720000);
   expect(await database.select().from(schema.rateLimitBucket)).toHaveLength(1);
 });
 
@@ -165,4 +165,21 @@ it("does not reset a newer window for a delayed request", async () => {
   expect((await limiter.checkWithCount("delayed", 60, 60000)).count).toBe(1);
   expect((await limiter.checkWithCount("delayed", 60, 59999)).count).toBe(2);
   expect((await database.select().from(schema.rateLimitBucket))[0].windowStart).toBe(60000);
+});
+
+it("preserves setup budgets when short-window signing cleanup runs", async () => {
+  vi.spyOn(Math, "random").mockReturnValue(0);
+  const setup = new FixedWindowLimiter(client, 600_000, true);
+  const signing = new FixedWindowLimiter(secondClient);
+  for (let i = 0; i < 10; i++) expect(await setup.check("setup:ip", 10, 0)).toBeNull();
+  await signing.check("signing", 60, 300_000);
+  expect((await setup.check("setup:ip", 10, 300_001))?.status).toBe(429);
+  expect(await setup.check("setup:ip", 10, 600_000)).toBeNull();
+});
+
+it("fails closed for setup without exposing bucket identifiers", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(client, "execute").mockRejectedValue(new Error("setup:private-ip"));
+  expect((await new FixedWindowLimiter(client, 600_000, true).check("setup:private-ip", 10))?.status).toBe(503);
+  expect(JSON.stringify(log.mock.calls)).not.toContain("private-ip");
 });

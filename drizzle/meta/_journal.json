@@ -57,6 +57,13 @@
       "when": 1791369897041,
       "tag": "0007_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791369897042,
+      "tag": "0008_setup_claim",
+      "breakpoints": true
     }
   ]
 }

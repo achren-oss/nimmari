@@ -1,5 +1,7 @@
 # Nimmari
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/achren-oss/nimmari)
+
 > Formerly Puumerkki. Not related to [solita/puumerkki](https://github.com/solita/puumerkki).
 
 [![CI](https://github.com/achren-oss/nimmari/actions/workflows/ci.yml/badge.svg)](https://github.com/achren-oss/nimmari/actions/workflows/ci.yml)
@@ -93,8 +95,10 @@ See [.env.example](.env.example). Empty optional values disable the correspondin
 | `DATABASE_URL` | SQLite file or libSQL URL; `file:./local.db` |
 | `DATABASE_AUTH_TOKEN` | Remote database token; optional for local files |
 | `BETTER_AUTH_SECRET` | Strong random authentication secret; set before startup |
-| `BETTER_AUTH_URL` | Authentication origin; `http://localhost:3000` |
-| `APP_URL` | Public origin for signing links; `http://localhost:3000` |
+| `BETTER_AUTH_URL` | Authentication origin; falls back to APP_URL, RENDER_EXTERNAL_URL, then local inference |
+| `APP_URL` | Public signing origin; falls back to BETTER_AUTH_URL, RENDER_EXTERNAL_URL, then `http://localhost:3000` |
+| `NIMMARI_SETUP_CODE` | Optional one-time first-account claim secret, at least 32 characters; legacy alias `PUUMERKKI_SETUP_CODE` |
+| `RENDER_EXTERNAL_URL` | Render-managed service URL; automatic public/auth URL fallback |
 | `NIMMARI_API_KEY` | Optional root/admin bearer secret for bootstrap |
 | `NIMMARI_API_OWNER_ID` | Optional existing user ID for root document requests |
 | `SERVICE_USER_EMAIL` | Email for the service-user creation script |
@@ -117,7 +121,7 @@ Nimmari is self-host only. Pick one:
 
 - **Render + Turso (recommended):** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
-- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.2.0` (published from `v*` tags), or `docker build -t nimmari .`, then
+- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.3.0` (published from `v*` tags), or `docker build -t nimmari .`, then
   `docker run -p 3000:3000 -v nimmari-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host nimmari`.
   Without `DATABASE_URL` the image uses `/data/nimmari.db` for new installs, or reuses `/data/puumerkki.db` if only that legacy file exists (mount the existing volume). An explicit `DATABASE_URL` always wins. Migrations run on start; `/api/health` reports status.
 
@@ -288,6 +292,6 @@ Nimmari is licensed under the GNU Affero General Public License v3.0 only. See [
 
 ### Deprecated environment aliases
 
-Every `NIMMARI_*` setting accepts the matching `PUUMERKKI_*` name as a deprecated alias: `API_KEY`, `API_OWNER_ID`, `AUDIT_TIMEZONE`, `WEBHOOK_SECRET`, `RATE_LIMIT_DEBUG`, and skill client settings `BASE_URL` and `BOT_API_KEY`. The new name takes precedence, including an explicitly empty value. Python clients also retain the deprecated bot-key fallback. See the [1.2.0 upgrade guide](docs/release-notes-v1.2.0.md).
+Every `NIMMARI_*` setting accepts the matching `PUUMERKKI_*` name as a deprecated alias: `API_KEY`, `API_OWNER_ID`, `SETUP_CODE`, `AUDIT_TIMEZONE`, `WEBHOOK_SECRET`, `RATE_LIMIT_DEBUG`, and skill client settings `BASE_URL` and `BOT_API_KEY`. The new name takes precedence, including an explicitly empty value. Python clients also retain the deprecated bot-key fallback. See the [1.2.0 upgrade guide](docs/release-notes-v1.2.0.md).
 
 Persisted browser draft keys, PDF seal markers, API key prefix `pmk_`, and existing webhook signature headers retain their legacy identifiers for compatibility.

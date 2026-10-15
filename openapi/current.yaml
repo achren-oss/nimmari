@@ -18,6 +18,78 @@ security:
 - ownerBearer: []
 - ownerSession: []
 paths:
+  /api/setup/claim:
+    get:
+      security: []
+      summary: Inspect one-time setup availability
+      responses:
+        '200':
+          description: Only enabled and claimed booleans; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, claimed]
+                properties:
+                  enabled: {type: boolean}
+                  claimed: {type: boolean}
+    post:
+      security: []
+      summary: Claim the first account and admin and regular API keys once
+      description: >-
+        Requires a configured 32+ character NIMMARI_SETUP_CODE (legacy PUUMERKKI_SETUP_CODE).
+        Constant-time secret comparison. Ten attempts per IP per ten-minute fixed window.
+        All writes are atomic. All responses have Cache-Control no-store.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [setupCode, email, name]
+              properties:
+                setupCode: {type: string}
+                email: {type: string, format: email}
+                name: {type: string}
+                password: {type: string, minLength: 8, maxLength: 128}
+      responses:
+        '201':
+          description: Account, generated password only when omitted, adminKey and agentKey with id/key/scope, and baseUrl. Plaintext keys returned once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, adminKey, agentKey, baseUrl]
+                properties:
+                  account:
+                    type: object
+                    required: [id, email, name]
+                    properties:
+                      id: {type: string}
+                      email: {type: string}
+                      name: {type: string}
+                  password: {type: string}
+                  adminKey:
+                    type: object
+                    properties:
+                      id: {type: string}
+                      key: {type: string}
+                      scope: {const: admin}
+                  agentKey:
+                    type: object
+                    properties:
+                      id: {type: string}
+                      key: {type: string}
+                      scope: {const: regular}
+                  baseUrl: {type: string}
+        '400': {description: Invalid account input}
+        '403': {description: Wrong setup code}
+        '404': {description: Setup disabled}
+        '409': {description: An account already exists}
+        '410': {description: 'Already claimed; error is already_claimed'}
+        '429': {description: Too many attempts}
+        '500': {description: Setup rolled back; retry permitted}
+        '503': {description: Rate limiter unavailable}
   /api/accounts:
     get:
       summary: List accounts (admin/root only)

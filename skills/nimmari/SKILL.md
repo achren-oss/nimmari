@@ -50,7 +50,7 @@ For installation, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/n
   keys can create regular keys and list/revoke keys for their own owner only.
 - Rotate by creating a replacement, switching the client secret, then revoking
   the old key with `DELETE /api/keys/{id}` or `POST /api/keys/{id}/revoke`.
-- Check returned URLs: the server constructs them from its `APP_URL`.
+- Check returned URLs: the server constructs them from APP_URL → BETTER_AUTH_URL → RENDER_EXTERNAL_URL → localhost:3000.
 
 ## Prepare the source
 
@@ -281,3 +281,5 @@ Apply `drizzle/0006_account_disabled.sql` before deploying with
 the Drizzle journal and runs once. This adds no public account-disable endpoint.
 
 Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.
+
+For fresh hosted setup, follow [INSTALL-FOR-AGENTS.md](../../../INSTALL-FOR-AGENTS.md): generate a one-time setup code, use Deploy to Render, then claim /api/setup/claim. Existing root/API-key provisioning remains supported.

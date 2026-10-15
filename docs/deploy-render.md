@@ -33,3 +33,7 @@ at initial creation. Change existing values in dashboard Environment.
 Render provides [RENDER_EXTERNAL_URL automatically](https://render.com/docs/environment-variables).
 Use external libSQL: free web-service storage is ephemeral. See the runbook for setup
 claim status/error handling, cold starts, threat handling and both installation paths. The setup code may stay after claim: it is single-use.
+
+## Performance
+
+**Measured end-to-end (15 October 2026):** A real run of [runbook section A](../INSTALL-FOR-AGENTS.md) using a Render free web service in Frankfurt from `ghcr.io/achren-oss/nimmari:1.3.0` and a real Turso database in `aws-eu-west-1` took 77 s from step 1 through the smoke test. From the Render service creation API call, deployment reached `live` in 44 s and health was OK at 52 s. Setup claim, login, skill install and the silent smoke test passed. An HTML-form signing including Chromium rendering on the free instance took about 15 s. After about 17 minutes idle, the first `/api/health` request took 45 s (cold start), and the next took 0.5 s. Teardown via the documented `DELETE` calls worked.

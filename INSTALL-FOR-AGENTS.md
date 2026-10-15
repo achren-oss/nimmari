@@ -217,7 +217,7 @@ Save the returned service ID and dashboard URL.
 
 Official API: [create service](https://api-docs.render.com/reference/create-service).
 
-### 5. Wait for deployment and health (up to about 10 minutes)
+### 5. Wait for deployment and health (usually under a minute; allow up to ten)
 
 ```bash
 set +x
@@ -241,7 +241,7 @@ done
 [ "$healthy" = true ] || { printf 'Health timeout; inspect Render deployment and cold start\n'; exit 1; }
 ```
 
-The first deploy pulls the image and runs migrations. Subsequent cold starts can take about a minute. Check [deploy status](https://api-docs.render.com/reference/list-deploys) as well as health so a failed deploy does not silently look successful. Preserve deployment state on a timeout; do not create another service.
+The first deploy pulls the image and runs migrations; it usually takes under a minute, but allow up to ten minutes. Subsequent cold starts can take about 45 seconds to a minute. Check [deploy status](https://api-docs.render.com/reference/list-deploys) as well as health so a failed deploy does not silently look successful. Preserve deployment state on a timeout; do not create another service.
 
 ### 6. Claim the first account and protect credentials
 
@@ -418,7 +418,7 @@ Never include keys, authentication secrets or passwords. Deliver the synthetic l
 
 ```text
 Nimmari URL: <PUBLIC_URL; login at /login>
-Cold start: sleeps after 15 minutes idle; allow about one minute to wake
+Cold start: sleeps after 15 minutes idle; allow about 45 seconds to a minute to wake
 Account email: <user-supplied email>
 Secrets stored at: <absolute server.env, server-admin.env and agent.env paths; private password handoff status>
 Render service: <service ID> — <returned dashboardUrl>
@@ -440,14 +440,16 @@ Anything unclear: <unresolved choices/blockers, or None>
 - **Render/Turso 401 or 403:** invalid/expired token or insufficient workspace/org access. Obtain a correct API credential privately; do not dump headers. Turso needs a Platform API token for provisioning.
 - **Render 402:** payment information required. Stop and report it. Do not add a card, select a paid plan, or silently move providers.
 - **Deploy failed:** open the saved Render dashboard URL and inspect logs privately; fetch service events with `GET /v1/services/{serviceId}/events` through `api`. Redact secrets before reporting. Check image tag, migrations and database connectivity. [Service events](https://api-docs.render.com/reference/list-events).
-- **Health timeout/cold start:** allow roughly a minute for waking and up to ten minutes for the first deploy; inspect deploy state and logs before extending the wait. Do not treat Render's loading HTML as healthy JSON.
+- **Health timeout/cold start:** allow about 45 seconds to a minute for waking; the first deploy usually takes under a minute, but allow up to ten minutes; inspect deploy state and logs before extending the wait. Do not treat Render's loading HTML as healthy JSON.
 - **Turso group/location errors:** list groups and locations; use a returned location code. Free allows one group; reuse the existing group rather than trying to buy another. Inspect 409 conflicts and ownership before reuse. Do not overwrite a database.
 - **Nimmari 401:** use the regular owner-scoped key from `agent.env` for documents; keep `server-admin.env` for administration. The missing-PDF authentication check must return 400.
 - **Timeout during a write:** inspect saved metadata and remote state before retrying account, key, database, service or signing-session creation.
 
 ## Free hosting facts and button behavior
 
-[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about one minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium. In a local container limited to 512 MB RAM and 0.1 CPU (`docker --memory 512m --cpus 0.1`), an HTML-form signing including Chromium rendering completed in about 18 s with about 116 MiB memory in use afterwards (measured 14 October 2026).
+[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about 45 seconds to a minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium. In a local container limited to 512 MB RAM and 0.1 CPU (`docker --memory 512m --cpus 0.1`), an HTML-form signing including Chromium rendering completed in about 18 s with about 116 MiB memory in use afterwards (measured 14 October 2026).
+
+**Measured end-to-end (15 October 2026):** A real run of section A using a Render free web service in Frankfurt from `ghcr.io/achren-oss/nimmari:1.3.0` and a real Turso database in `aws-eu-west-1` took 77 s from step 1 through the smoke test. From the Render service creation API call, deployment reached `live` in 44 s and health was OK at 52 s. Setup claim, login, skill install and the silent smoke test passed. An HTML-form signing including Chromium rendering on the free instance took about 15 s. After about 17 minutes idle, the first `/api/health` request took 45 s (cold start), and the next took 0.5 s. Teardown via the documented `DELETE` calls worked.
 
 [Turso Free](https://turso.tech/pricing) is $0, needs no card, and includes 100 databases, 5 GB storage, 500M rows read and 10M rows written per month. Signed PDFs live in the database. Stay within the free quotas; never enable paid resources automatically.
 

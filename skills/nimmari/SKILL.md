@@ -10,6 +10,8 @@ Read [reference/api-cheatsheet.md](reference/api-cheatsheet.md) for request sche
 examples, validation details, lifecycle responses, and implementation sources.
 Use the deployed instance's matching source when its version differs from this repo.
 
+For installation, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/nimmari/blob/main/INSTALL-FOR-AGENTS.md): free hosted Render + Turso is the default; local/self-managed installation requires an explicit user request.
+
 ## Establish the request
 
 - Ask explicitly: **“Who needs to sign this document?”**

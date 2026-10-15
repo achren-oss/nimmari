@@ -1,88 +1,220 @@
 # Install Nimmari: runbook for AI agents
 
-Use this runbook when a user asks you to install Nimmari. Run the Bash blocks in order in the same shell on the Docker host. This installs version 1.2.0, provisions a real login and a separate regular agent key, and prepares a disposable signing link. Do not sign or fill anything for the user. See [AGENTS.md](AGENTS.md) for real-document rules.
+The **default is a free hosted Render web service + Turso libSQL database**, installed by the agent through HTTP APIs. Do not ask where to install. Run the Bash blocks in order in the same shell. No Render or Turso CLI, repository fork, local Docker, or paid plan is required. Pin the prebuilt image to `ghcr.io/achren-oss/nimmari:1.2.0`. See [AGENTS.md](AGENTS.md) for real-document rules; never fill or sign for a person.
 
-## 1. Check prerequisites and choose URLs
+## Free hosting facts (checked 15 October 2026)
+
+[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about one minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium.
+
+[Turso Free](https://turso.tech/pricing) is $0, needs no card, and includes 100 databases, 5 GB storage, 500M rows read and 10M rows written per month. Signed PDFs live in the database. Stay within the free quotas; never enable paid resources automatically.
+
+Alternatives checked on the same date: [Fly.io](https://fly.io/docs/about/pricing/) has only a trial for new organizations, no ongoing free tier; [Koyeb](https://www.koyeb.com/docs/faqs/pricing) requires a card with a $29 verification hold for its free instance (since February 2026); [Railway Free](https://railway.com/pricing) provides $1/month credit and 0.5 GB RAM per service. Render + Turso is the default.
+
+## 0. One initial message: request only what the agent cannot obtain
+
+Tell the user:
+
+> I'll deploy Nimmari free on Render + Turso, create your first login and a separate agent key, install the document skill, and create a silent synthetic test link (example.com only; no email or signature). Please provide:
+> 1. A Render API key from Dashboard → Account Settings → API Keys. If needed, [create a free Render account](https://dashboard.render.com/register); no card needed.
+> 2. A Turso Platform API token from https://app.turso.tech → Settings → API Tokens (optional CLI: `turso auth api-tokens mint`). A free account needs no card. This is a Platform token, not a database token.
+> 3. Your email address and name for the first Nimmari account.
+>
+> Supply tokens through the agent's secret manager or environment variables `RENDER_API_KEY` and `TURSO_API_TOKEN`, never public chat. If a private paste is unavoidable, I will store it immediately in a chmod 600 file without echoing it.
+
+Wait for these inputs. Never paste tokens into commands/transcripts, echo them, enable tracing, dump environment files, or print HTTP request/response bodies containing secrets. Private pasted credentials must be captured through a non-logged secret input into the protected file, not interpolated into shell command text. Ask again only for genuine ambiguity (multiple organizations/workspaces, existing resources) or missing inputs.
+
+## 1. Prerequisites and protected state
 
 ```bash
 set +x
 set -euo pipefail
-for tool in docker curl python3 openssl; do
+umask 077
+for tool in curl python3 openssl; do
   command -v "$tool" >/dev/null || { printf 'Missing prerequisite: %s\n' "$tool"; exit 1; }
 done
-docker info >/dev/null
-python3 --version
-openssl version
-# Python 3 handles JSON below; jq is an optional alternative.
-command -v jq >/dev/null && jq --version || true
-```
-
-Install missing tools through the host's package manager; start Docker if needed. Python must support `venv` and pip for step 6. Git is needed only if downloading the repository. Poppler (`pdftoppm`, often packaged as `poppler-utils`) is needed for the smoke-test placement preview.
-
-Choose an unused host port and the URL the user will actually open. Defaults:
-
-```bash
-PORT=3000
-PUBLIC_URL="http://localhost:$PORT"
-BASE_URL="http://localhost:$PORT"
-export BASE_URL PUBLIC_URL
-```
-
-For a remote host, set `PUBLIC_URL` to its reachable HTTPS origin, with no trailing slash (for example `https://sign.example.org`). Configure DNS, TLS and reverse proxy forwarding to the host port before proceeding. `BASE_URL` is the local API connection; `PUBLIC_URL` is used for login and generated links. Localhost links work only on the same machine. Docker's port mapping below exposes the port on host interfaces; choose host firewall rules appropriate to your deployment.
-
-## 2. Generate secrets without printing them
-
-Keep secrets outside the repository. Do not enable tracing, use `echo`, dump env files, or include secrets in reports or logs. These commands refuse to overwrite an existing installation directory; on a rerun, inspect the existing installation instead of generating replacements.
-
-```bash
-set +x
-umask 077
 INSTALL_DIR="$HOME/.config/nimmari"
 mkdir -p "$HOME/.config"
 mkdir "$INSTALL_DIR"
 SERVER_ENV="$INSTALL_DIR/server.env"
 export INSTALL_DIR SERVER_ENV
+: "${RENDER_API_KEY:?Load from secret manager}"
+: "${TURSO_API_TOKEN:?Load from secret manager}"
+```
+
+If the directory exists, inspect the existing deployment privately and resume; do not overwrite secrets or recreate resources. Python needs venv/pip for the skill; Poppler (`pdftoppm`, often `poppler-utils`) is needed for the test placement preview. Install missing prerequisites as necessary. Git is optional when source is already available.
+
+The following small HTTP helper uses curl with headers in a protected file and JSON over stdin; no secret is passed in curl's argv. Responses stay in protected files. Python urllib reading environment variables is an equally valid alternative. Do not use verbose curl or automatic retries for writes. Network timeouts can occur after a successful write: inspect resource state before repeating it.
+
+```bash
+set +x
+python3 - <<'PYHTTP'
+import os, pathlib
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+for name, var in [('render', 'RENDER_API_KEY'), ('turso', 'TURSO_API_TOKEN')]:
+    token = os.environ[var]
+    assert token and not any(c in token for c in '\r\n')
+    p = root / (name + '.headers')
+    with p.open('x') as f:
+        f.write('Authorization: Bearer ' + token + '\nContent-Type: application/json\n')
+    p.chmod(0o600)
+PYHTTP
+api() {
+  # api provider METHOD URL output-file [body-file]; inspect only safe metadata.
+  local provider="$1" method="$2" url="$3" output="$4"
+  local code
+  if [ "$#" = 5 ]; then
+    code=$(curl --silent --show-error --connect-timeout 10 --max-time 90 \
+      --request "$method" --header @"$INSTALL_DIR/$provider.headers" \
+      --data-binary @- --output "$output" --write-out '%{http_code}' "$url" < "$5")
+  else
+    code=$(curl --silent --show-error --connect-timeout 10 --max-time 90 \
+      --request "$method" --header @"$INSTALL_DIR/$provider.headers" \
+      --output "$output" --write-out '%{http_code}' "$url")
+  fi
+  chmod 600 "$output"
+  case "$code" in
+    2??) ;;
+    *) printf 'HTTP %s from %s; inspect protected response, stop before retrying\n' "$code" "$provider"; return 1 ;;
+  esac
+}
+api turso GET https://api.turso.tech/v1/organizations "$INSTALL_DIR/organizations.json"
+api render GET 'https://api.render.com/v1/owners?limit=100' "$INSTALL_DIR/owners.json"
+```
+
+Read the protected metadata: Turso returns an array with `slug`, `name`, `type`; Render returns an array of `{owner:{id,name,...},cursor}`. Follow Render cursor pagination when the result fills a page. Select the personal Turso organization if it is the only one; if several, ask which slug. Select the sole Render owner; if several, ask which workspace. Export `TURSO_ORG` and `RENDER_OWNER_ID` with the selected identifiers. Do not guess.
+
+References: [Turso organizations](https://docs.turso.tech/api-reference/organizations/list), [Render owners](https://api-docs.render.com/reference/list-owners).
+
+## 2. Create the Turso database through the Platform API
+
+```bash
+set +x
+: "${TURSO_ORG:?Select organization first}"
+TURSO_ORG_URL="https://api.turso.tech/v1/organizations/$TURSO_ORG"
+export TURSO_ORG TURSO_ORG_URL
+api turso GET "$TURSO_ORG_URL/groups" "$INSTALL_DIR/groups.json"
+```
+
+Inspect `groups`. Use `default` if present. If absent and another group exists, use that existing group (ask if several choices); Free permits only one group. If there are no groups, query `GET https://api.turso.tech/v1/locations` into a protected file and choose the available location closest to Frankfurt. Use `fra` only if returned; current codes may instead be `aws-eu-west-1` (Ireland). Create with `POST $TURSO_ORG_URL/groups`, body `{"name":"default","location":"<returned location code>"}` using `api` and a protected body file. On 409, retrieve groups and inspect rather than overwriting. Export `TURSO_GROUP` as the chosen group name.
+
+```bash
+set +x
+export TURSO_GROUP="${TURSO_GROUP:-default}"
+python3 - <<'PYDB'
+import json, os, pathlib
+p = pathlib.Path(os.environ['INSTALL_DIR']) / 'database-create.json'
+p.write_text(json.dumps({'name': 'nimmari', 'group': os.environ['TURSO_GROUP']}))
+PYDB
+api turso POST "$TURSO_ORG_URL/databases" "$INSTALL_DIR/database.json" "$INSTALL_DIR/database-create.json"
+api turso POST "$TURSO_ORG_URL/databases/nimmari/auth/tokens?authorization=full-access" "$INSTALL_DIR/database-token.json"
+python3 - <<'PYDB'
+import json, os, pathlib
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+db = json.loads((root / 'database.json').read_text())['database']
+token = json.loads((root / 'database-token.json').read_text())['jwt']
+assert db['Name'] == 'nimmari' and db['Hostname'] and token
+with pathlib.Path(os.environ['SERVER_ENV']).open('x') as f:
+    f.write('DATABASE_URL=libsql://' + db['Hostname'] + '\nDATABASE_AUTH_TOKEN=' + token + '\n')
+pathlib.Path(os.environ['SERVER_ENV']).chmod(0o600)
+PYDB
+```
+
+On database 409, stop this block: inspect `GET $TURSO_ORG_URL/databases/nimmari` (response `database.Hostname`, `database.group`). Do not migrate an unrelated database. Establish whether it belongs to this installation before reusing it or asking about another name. The token endpoint returns `jwt`; omitted expiration defaults to `never`, so protect it and rotate when needed. The Platform token stays with the installer, never in the service environment.
+
+Official schemas: [create database](https://docs.turso.tech/api-reference/databases/create), [retrieve database](https://docs.turso.tech/api-reference/databases/retrieve), [database tokens](https://docs.turso.tech/api-reference/databases/create-token), [groups](https://docs.turso.tech/api-reference/groups/create), [locations](https://docs.turso.tech/api-reference/locations/list).
+
+## 3. Generate server secrets without printing
+
+```bash
+set +x
 {
   printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
   printf 'NIMMARI_API_KEY=%s\n' "$(openssl rand -hex 32)"
-} > "$SERVER_ENV"
+} >> "$SERVER_ENV"
 chmod 600 "$SERVER_ENV"
 ```
 
-`server.env` contains the authentication secret and root administration key. The root does not need `NIMMARI_API_OWNER_ID` for account/key provisioning. Never give the root key to the document agent.
+Do this once. The root key provisions accounts and keys without `NIMMARI_API_OWNER_ID`. Never give the root key to the document agent.
 
-## 3. Start Docker and wait for health
+## 4. Create the free Render image service
 
 ```bash
-docker run -d --name nimmari --restart unless-stopped \
-  -p "$PORT:3000" -v nimmari-data:/data \
-  --env-file "$SERVER_ENV" \
-  -e BETTER_AUTH_URL="$PUBLIC_URL" -e APP_URL="$PUBLIC_URL" \
-  ghcr.io/achren-oss/nimmari:1.2.0
-
-healthy=false
-for attempt in {1..60}; do
-  if curl --silent --show-error --fail --connect-timeout 3 --max-time 5 "$BASE_URL/api/health" \
-      -o "$INSTALL_DIR/health.json" 2>/dev/null &&
-      python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("status") != "ok")' \
-        "$INSTALL_DIR/health.json"; then
-    healthy=true
-    break
-  fi
-  sleep 2
-done
-[ "$healthy" = true ] || { printf 'Health check failed; inspect docker logs nimmari\n'; exit 1; }
+set +x
+: "${RENDER_OWNER_ID:?Select workspace first}"
+export RENDER_OWNER_ID
+python3 - <<'PYRENDER'
+import json, os, pathlib
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+env = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
+body = {'type': 'web_service', 'name': 'nimmari', 'ownerId': os.environ['RENDER_OWNER_ID'],
+    'image': {'ownerId': os.environ['RENDER_OWNER_ID'], 'imagePath': 'ghcr.io/achren-oss/nimmari:1.2.0'},
+    'serviceDetails': {'runtime': 'image', 'plan': 'free', 'region': 'frankfurt',
+        'healthCheckPath': '/api/health', 'numInstances': 1},
+    'envVars': [{'key': k, 'value': v} for k, v in env.items()]}
+(root / 'service-create.json').write_text(json.dumps(body))
+PYRENDER
+api render POST https://api.render.com/v1/services "$INSTALL_DIR/service.json" "$INSTALL_DIR/service-create.json"
+python3 - <<'PYRENDER'
+import json, os, pathlib, shlex
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+s = json.loads((root / 'service.json').read_text())['service']
+url = s['serviceDetails']['url'].rstrip('/')
+assert url.startswith('https://')
+with (root / 'deployment.env').open('x') as f:
+    for k, v in {'SERVICE_ID': s['id'], 'PUBLIC_URL': url, 'BASE_URL': url,
+                 'RENDER_DASHBOARD_URL': s['dashboardUrl'], 'TURSO_ORG': os.environ['TURSO_ORG']}.items():
+        f.write(k + '=' + shlex.quote(v) + '\n')
+with pathlib.Path(os.environ['SERVER_ENV']).open('a') as f:
+    f.write('BETTER_AUTH_URL=' + url + '\nAPP_URL=' + url + '\n')
+env = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
+(root / 'render-env.json').write_text(json.dumps([{'key': k, 'value': v} for k, v in env.items()]))
+PYRENDER
+set -a
+source "$INSTALL_DIR/deployment.env"
+set +a
+api render PUT "https://api.render.com/v1/services/$SERVICE_ID/env-vars" "$INSTALL_DIR/env-update.json" "$INSTALL_DIR/render-env.json"
+printf '{}\n' > "$INSTALL_DIR/deploy-request.json"
+api render POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" "$INSTALL_DIR/deploy.json" "$INSTALL_DIR/deploy-request.json"
 ```
 
-The image includes Chromium, runs migrations at startup, listens on container port 3000, and defaults to SQLite at `/data/nimmari.db` (reusing `/data/puumerkki.db` when the new file is absent). The named volume persists accounts, documents and signatures across container replacement. No email provider is configured by these commands.
+**PUT replaces every environment variable**, so include the full list: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `BETTER_AUTH_SECRET`, `NIMMARI_API_KEY`, `BETTER_AUTH_URL`, `APP_URL`. The last two must match the returned public URL. Render may append a suffix when a subdomain is taken; always use `service.serviceDetails.url`, never construct it from the name. On 409, inspect existing services before retrying with an unused name; never overwrite an existing deployment. Save the returned service ID and dashboard URL.
 
-## 4. Ask for the user's account details, then provision
+[Dockerfile](Dockerfile) defaults `PORT=3000`; Render supplies its own `PORT`. [The entrypoint](scripts/docker-entrypoint.sh) runs migrations then `node server.js`, which reads that environment variable and binds `0.0.0.0`. Do not override Render's port or add a local database/disk. Chromium is bundled. No email provider is configured here.
 
-**Ask the user for their email address and name. Never invent either.** Wait for the answer. Enter their exact answer at the prompts (or supply these variables through your interactive shell tooling). Public signup is disabled.
+Official API: [create service](https://api-docs.render.com/reference/create-service), [replace environment variables](https://api-docs.render.com/reference/update-env-vars-for-service), [trigger deploy](https://api-docs.render.com/reference/create-deploy).
+
+## 5. Wait for deployment and health (up to about 10 minutes)
 
 ```bash
-read -r -p 'Account email supplied by the user: ' OWNER_EMAIL
-read -r -p 'Account name supplied by the user: ' OWNER_NAME
+set +x
+healthy=false
+deadline=$((SECONDS + 600))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  api render GET "https://api.render.com/v1/services/$SERVICE_ID/deploys?limit=1" "$INSTALL_DIR/deploy-status.json"
+  status=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); print(x[0]["deploy"]["status"] if x else "pending")' "$INSTALL_DIR/deploy-status.json")
+  case "$status" in
+    build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+      printf 'Deploy stopped: %s; inspect dashboard logs/events\n' "$status"; exit 1 ;;
+  esac
+  if [ "$status" = live ] &&
+      curl --silent --show-error --fail --connect-timeout 5 --max-time 20 \
+        "$PUBLIC_URL/api/health" -o "$INSTALL_DIR/health.json" 2>/dev/null &&
+      python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("status") != "ok")' "$INSTALL_DIR/health.json"; then
+    healthy=true; break
+  fi
+  sleep 10
+done
+[ "$healthy" = true ] || { printf 'Health timeout; inspect Render deployment and cold start\n'; exit 1; }
+```
+
+The first deploy pulls the image and runs migrations. Subsequent cold starts can take about a minute. Check [deploy status](https://api-docs.render.com/reference/list-deploys) as well as health so a failed deploy does not silently look successful. Preserve deployment state on a timeout; do not create another service.
+
+## 6. Provision the first account
+
+Use the email and name already supplied in step 0; never invent either. Set `OWNER_EMAIL` and `OWNER_NAME` privately in the shell. Public signup is disabled.
+
+```bash
+set +x
 export OWNER_EMAIL OWNER_NAME
 python3 - <<'PY'
 import json, os, pathlib, urllib.request
@@ -107,9 +239,10 @@ Omitting `password` asks the server to generate it. Securely read `account-once.
 
 On an HTTP error, stop and inspect state before retrying: a timeout may occur after an account was created. A 409 means the email already exists; do not choose another person's address or silently replace credentials.
 
-## 5. Create and verify the regular agent key
+## 7. Create and verify the regular agent key
 
 ```bash
+set +x
 python3 - <<'PY'
 import json, os, pathlib, shlex, urllib.request
 root = pathlib.Path(os.environ['INSTALL_DIR'])
@@ -143,19 +276,21 @@ code=$(printf 'Authorization: Bearer %s\n' "$NIMMARI_API_KEY" | \
 
 `agent.env` holds only the regular owner-scoped key and the reachable instance URL. Load it into the agent's environment with tracing disabled. Do not source `server.env` into the document agent. If key creation times out, inspect key metadata before creating another key; plaintext is returned only at creation.
 
-## 6. Install the portable skill
+### Install the portable skill
 
-Use an existing repository clone, or download one into a new directory:
+Use an existing repository clone, or shallow-clone the release (git is optional if the source is already available; otherwise download and unpack the v1.2.0 source archive with curl):
 
 ```bash
+set +x
 # Skip this clone/cd pair when already in the repository.
-git clone --depth 1 https://github.com/achren-oss/nimmari "$INSTALL_DIR/source"
+git clone --depth 1 --branch v1.2.0 https://github.com/achren-oss/nimmari "$INSTALL_DIR/source"
 cd "$INSTALL_DIR/source"
 ```
 
 Copy the entire skill into your agent's skill directory. This example uses Codex; adjust `SKILLS_DIR` for your agent. If the destination exists, inspect it before replacing anything.
 
 ```bash
+set +x
 SKILLS_DIR="$HOME/.codex/skills"
 mkdir -p "$SKILLS_DIR"
 [ ! -e "$SKILLS_DIR/nimmari" ]
@@ -168,13 +303,14 @@ python3 skills/nimmari/scripts/nimmari_flow.py --help
 
 Read the installed `SKILL.md` before real document work. The helper requires `requests`; the requirements also install `pypdf`. Keep the source checkout for the following commands.
 
-## 7. Prepare a synthetic smoke test, preview, then send silently
+## 8. Prepare a synthetic smoke test, preview, then send silently
 
-This step creates persistent test data. Confirm the user wants this disposable test before running it. Explain that it has **one synthetic signer, `user-smoke@example.com`, and one signature line belonging to that slot**, with no real identity or legal document. Ask them to confirm that arrangement before creating fields. Never substitute this address for their real account email. If they decline, skip the smoke test and report that it was skipped.
+Run this disposable synthetic test by default as part of the authorized installation; do not ask for another confirmation. It creates persistent test data with **one synthetic signer, `user-smoke@example.com`, and one signature line assigned to key `smoke`**. This is deliberate synthetic-test authorization, not permission to create fields on real documents without asking. Never use the owner's real email. The test is cancellable; never sign it for the user. Mention it in the final report.
 
 The repository's `scripts/fixtures/acroform-fillable.pdf` has existing form fields; instead, this dependency-free Python generator makes a simple one-page PDF with exactly one line. It also makes an SVG placement overlay on the same 800-pixel coordinate grid.
 
 ```bash
+set +x
 SMOKE_DIR="$INSTALL_DIR/smoke"
 mkdir "$SMOKE_DIR"
 export SMOKE_DIR
@@ -214,6 +350,7 @@ pdftoppm -singlefile -png -scale-to-x 800 -scale-to-y -1 \
 Open `placement.svg` in an image viewer/browser supporting its adjacent `page.png` (or draw the JSON rectangle on `page.png` with your image tools). **Visually inspect the rendered page and overlay**: the red signature box must sit above and end at the only signature line. Do not send until you have viewed it. Install Poppler or report the blocker if rendering is unavailable.
 
 ```bash
+set +x
 python3 skills/nimmari/scripts/nimmari_flow.py "$SMOKE_DIR/smoke.pdf" \
   --title 'Disposable installation smoke test' \
   --fields "$SMOKE_DIR/fields.json" --prefill "$SMOKE_DIR/prefill.json" \
@@ -230,31 +367,127 @@ PY
 
 The helper sets upload `notify="false"` and send `notify:false`; there is no `--notify` flag. `--prefill` is required even for an empty object. `--print-urls` includes the secret URL in the protected output file. Read that file privately and **return the signing URL to the user in chat**, identifying it as a synthetic test link. Never email it, publish it, or open it to fill, draw or submit a signature. If the helper fails, inspect document state before retrying; writes are not automatically retried.
 
-## 8. Optional cleanup and non-Docker fallback
+## 9. Cleanup and teardown — only on explicit user request
 
-After private password handoff and key provisioning, remove `account-once.json`. Keep `server.env`, `agent.env`, and the named volume securely backed up; never commit them. Smoke files include a secret link; remove them when no longer needed. To invalidate an outstanding test link, obtain explicit authorization and cancel its document with `POST /api/documents/{documentId}/cancel` using the regular key and optional JSON `{"reason":"Installation smoke test cleanup"}`. Cancellation is terminal. Local file deletion alone does not invalidate links or remove server data.
+After private password handoff and key provisioning succeed, remove `account-once.json`. Keep `server.env`, `agent.env` and `deployment.env` securely backed up; never commit them. Remove transient `*.headers`, create/request JSON files, database-token responses and Render env payloads when no longer needed; they contain credentials. Keep provider credentials in the secret manager for future administration. Smoke output contains a secret signing link.
 
-To stop the service: `docker stop nimmari`; restart with `docker start nimmari`. Removing a stopped container with `docker rm nimmari` preserves the named volume. Do not delete `nimmari-data` unless the user explicitly requests permanent data deletion.
+To invalidate the synthetic test, only with explicit user authorization, call `POST /api/documents/{documentId}/cancel` with the regular agent key and optional `{"reason":"Installation smoke test cleanup"}`. Cancellation is terminal. Local file deletion does not invalidate links.
 
-Without Docker, follow [README Quick start](README.md#quick-start), including Node/npm, Chromium, secret configuration and migrations, then return to account provisioning here. Do not pass the Docker-only `/data` database path to the native setup.
+**Do not tear down as routine cleanup.** Only after the user explicitly requests the particular deletion, use the protected HTTP helper:
+
+```bash
+set +x
+# Destructive: execute only the deletion(s) explicitly requested by the user.
+api render DELETE "https://api.render.com/v1/services/$SERVICE_ID" "$INSTALL_DIR/render-delete.json"
+api turso DELETE "$TURSO_ORG_URL/databases/nimmari" "$INSTALL_DIR/turso-delete.json"
+```
+
+Deleting the service stops hosting; deleting the database permanently removes its accounts, documents and signatures. Confirm the saved identifiers refer to this installation. [Render deletion](https://api-docs.render.com/reference/delete-service), [Turso deletion](https://docs.turso.tech/api-reference/databases/delete).
+
+## 10. Final report
+
+Never include keys, authentication secrets or passwords. Deliver the synthetic link only to the requesting user in chat:
+
+```text
+Nimmari URL: <PUBLIC_URL; login at /login>
+Cold start: sleeps after 15 minutes idle; allow about one minute to wake
+Account email: <user-supplied email>
+Secrets stored at: <absolute server.env and agent.env paths; private password handoff status>
+Render service: <service ID> — <returned dashboardUrl>
+Turso database: nimmari (organization <slug>)
+Smoke-test link: <private synthetic URL; example.com signer; no emails sent>
+Anything unclear: <unresolved choices/blockers, or None>
+```
 
 ## Troubleshooting
 
-- **Port in use:** select another `PORT`, update local URLs, and recreate the failed container after inspecting its state. If the public origin changes, recreate with matching `BETTER_AUTH_URL` and `APP_URL`; preserve the volume and secrets.
-- **Health not ok:** inspect `docker ps -a` and `docker logs --tail 100 nimmari` privately for migration, database permissions or startup errors. Do not dump `docker inspect` environment values. Check the local port and public proxy separately.
-- **401:** wrong, missing or revoked key, or missing owner configuration. Use `agent.env` for documents; an ownerless root key is for administration. The README check must return 400, not 401.
-- **Shell environment overrides `.env.local`:** for native installs, stale exported variables take precedence in Node/Next.js. Unset stale `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `NIMMARI_API_KEY` and related settings before loading the intended file. Do not print their values while diagnosing.
-- **Image pull unauthorized:** verify the exact public image/tag `ghcr.io/achren-oss/nimmari:1.2.0` and registry connectivity. Stale GHCR credentials may interfere; inspect your registry setup and use `docker logout ghcr.io` only if discarding that host's saved login is appropriate. If authentication is required, use an authorized token with package-read access via `docker login ghcr.io --password-stdin`; never paste tokens into command arguments or logs.
-- **Container name already exists:** inspect the existing container first. Do not overwrite an existing deployment or its secrets while trying to repair a partial install.
+- **Render/Turso 401 or 403:** invalid/expired token or insufficient workspace/org access. Obtain a correct API credential privately; do not dump headers. Turso needs a Platform API token for provisioning.
+- **Render 402:** payment information required. Stop and report it. Do not add a card, select a paid plan, or silently move providers.
+- **Deploy failed:** open the saved Render dashboard URL and inspect logs privately; fetch service events with `GET /v1/services/{serviceId}/events` through `api`. Redact secrets before reporting. Check image tag, migrations and database connectivity. [Service events](https://api-docs.render.com/reference/list-events).
+- **Health timeout/cold start:** allow roughly a minute for waking and up to ten minutes for the first deploy; inspect deploy state and logs before extending the wait. Do not treat Render's loading HTML as healthy JSON.
+- **Turso group/location errors:** list groups and locations; use a returned location code. Free allows one group; reuse the existing group rather than trying to buy another. Inspect 409 conflicts and ownership before reuse. Do not overwrite a database.
+- **Nimmari 401:** use the regular owner-scoped key from `agent.env` for documents; ownerless root is only for administration. The missing-PDF authentication check must return 400.
+- **Timeout during a write:** inspect saved metadata and remote state before retrying account, key, database, service or signing-session creation.
 
-## Final report
+## Only if the user explicitly asks for local or self-managed install
 
-Fill this template; never include keys, authentication secrets or the generated password:
+Skip hosted steps 0–5 only when the user requests this path. Ask for the first account email/name if missing. Run these tested Docker steps on the intended host, then continue with shared steps 6–8 and the final report (mark Render/Turso not applicable). No provider tokens are needed. Do not choose this path because the hosted setup has an unresolved error.
 
-```text
-Nimmari URL: <public URL>
-Account email: <user-supplied email>
-Secrets stored at: <absolute server.env and agent.env paths; password handoff/storage status, no values>
-Smoke-test link: <private synthetic signing URL, or skipped/blocked and why>
-Anything unclear: <list unresolved choices or blockers; “None” if resolved>
+```bash
+set +x
+set -euo pipefail
+for tool in docker curl python3 openssl; do
+  command -v "$tool" >/dev/null || { printf 'Missing prerequisite: %s\n' "$tool"; exit 1; }
+done
+docker info >/dev/null
+python3 --version
+openssl version
+# Python 3 handles JSON below; jq is an optional alternative.
+command -v jq >/dev/null && jq --version || true
 ```
+
+Install missing tools through the host's package manager; start Docker if needed. Python must support `venv` and pip for the shared skill-installation step. Git is needed only if downloading the repository. Poppler (`pdftoppm`, often packaged as `poppler-utils`) is needed for the smoke-test placement preview.
+
+Choose an unused host port and the URL the user will actually open. Defaults:
+
+```bash
+set +x
+PORT=3000
+PUBLIC_URL="http://localhost:$PORT"
+BASE_URL="http://localhost:$PORT"
+export BASE_URL PUBLIC_URL
+```
+
+For a remote host, set `PUBLIC_URL` to its reachable HTTPS origin, with no trailing slash (for example `https://sign.example.org`). Configure DNS, TLS and reverse proxy forwarding to the host port before proceeding. `BASE_URL` is the local API connection; `PUBLIC_URL` is used for login and generated links. Localhost links work only on the same machine. Docker's port mapping below exposes the port on host interfaces; choose host firewall rules appropriate to your deployment.
+
+### Generate local secrets
+
+Keep secrets outside the repository. Do not enable tracing, use `echo`, dump env files, or include secrets in reports or logs. These commands refuse to overwrite an existing installation directory; on a rerun, inspect the existing installation instead of generating replacements.
+
+```bash
+set +x
+umask 077
+INSTALL_DIR="$HOME/.config/nimmari"
+mkdir -p "$HOME/.config"
+mkdir "$INSTALL_DIR"
+SERVER_ENV="$INSTALL_DIR/server.env"
+export INSTALL_DIR SERVER_ENV
+{
+  printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
+  printf 'NIMMARI_API_KEY=%s\n' "$(openssl rand -hex 32)"
+} > "$SERVER_ENV"
+chmod 600 "$SERVER_ENV"
+```
+
+`server.env` contains the authentication secret and root administration key. The root does not need `NIMMARI_API_OWNER_ID` for account/key provisioning. Never give the root key to the document agent.
+
+### Start Docker and wait for health
+
+```bash
+set +x
+docker run -d --name nimmari --restart unless-stopped \
+  -p "$PORT:3000" -v nimmari-data:/data \
+  --env-file "$SERVER_ENV" \
+  -e BETTER_AUTH_URL="$PUBLIC_URL" -e APP_URL="$PUBLIC_URL" \
+  ghcr.io/achren-oss/nimmari:1.2.0
+
+healthy=false
+for attempt in {1..60}; do
+  if curl --silent --show-error --fail --connect-timeout 3 --max-time 5 "$BASE_URL/api/health" \
+      -o "$INSTALL_DIR/health.json" 2>/dev/null &&
+      python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("status") != "ok")' \
+        "$INSTALL_DIR/health.json"; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+[ "$healthy" = true ] || { printf 'Health check failed; inspect docker logs nimmari\n'; exit 1; }
+```
+
+The image includes Chromium, runs migrations at startup, listens on container port 3000, and defaults to SQLite at `/data/nimmari.db` (reusing `/data/puumerkki.db` when the new file is absent). The named volume persists accounts, documents and signatures across container replacement. No email provider is configured by these commands.
+
+
+Stop with `docker stop nimmari`, restart with `docker start nimmari`. `docker rm nimmari` on a stopped container preserves the named volume. Never delete `nimmari-data` without explicit permanent-deletion authorization. Inspect existing containers/secrets before repairing a partial install. For port conflicts choose another host `PORT`, update URLs and recreate the container with the same volume and secrets. Inspect `docker logs --tail 100 nimmari` privately; do not dump `docker inspect` environment values. For image-pull errors check the exact public tag and registry access before altering saved GHCR credentials.
+
+For a native install follow [README Quick start](README.md#quick-start), including Node/npm, Chromium, secret configuration and migrations, then return to steps 6–8. Do not pass Docker's `/data` path to native setup. Stale exported environment variables override `.env.local`; unset stale database/auth settings without printing their values.

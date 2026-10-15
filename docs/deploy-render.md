@@ -4,13 +4,13 @@ This is the primary, recommended way to run Nimmari: Render runs the Docker imag
 (Chromium included for HTML-form rendering) and Turso hosts the database. Both have
 free tiers, which are enough for personal use and evaluation.
 
-> Free-tier facts below were checked on **7 October 2026** against the providers'
+> Free-tier facts below were checked on **15 October 2026** against the providers'
 > official pages. Providers change their terms; re-check the linked pages.
 
 ## What the free tiers mean for Nimmari
 
 **Render free web service** ([render.com/docs/free](https://render.com/docs/free))
-- 0.1 CPU / 512 MB RAM. PDF rendering with Chromium works but is slow; use a paid
+- No card needed; 0.1 CPU / 512 MB RAM. PDF rendering with Chromium works but is slow; use a paid
   instance for regular use.
 - **Spins down after 15 minutes without inbound traffic.** The next request wakes it
   up, which takes about one minute. A signer opening a link may see Render's loading page.
@@ -30,6 +30,8 @@ free tiers, which are enough for personal use and evaluation.
 ## Performance on the free tier
 
 Measured 7.10.2026 (Frankfurt, 0.1 CPU / 512 MB, Turso Ireland): signing an HTML document, including the Chromium PDF render, takes about 10 s (9.4–10.4 s). Upload, send and PDF fetch each take under 1.5 s. After about 15 minutes idle the service sleeps, and the first request took 27.6 s. The free plan is fine for evaluation. For regular use, pick the cheapest paid instance. Clients can pre-warm the service by calling `/api/health` when the UI opens. Details: [benchmarks/render-free-2026-10-07.md](benchmarks/render-free-2026-10-07.md).
+
+For an agent-run installation using the prebuilt image and HTTP APIs (no provider CLIs or fork required), follow [INSTALL-FOR-AGENTS.md](../INSTALL-FOR-AGENTS.md). The steps below are the alternative manual Blueprint workflow.
 
 ## Steps
 

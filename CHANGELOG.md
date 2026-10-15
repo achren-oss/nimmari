@@ -4,6 +4,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+- Make free hosted Render + Turso the default agent installation, using HTTP APIs and the pinned 1.2.0 image; retain explicit local Docker setup and silent synthetic verification.
+
 ## [1.2.0] - 2026-10-15
 
 - Rename the app, repository, and Docker image to Nimmari (formerly Puumerkki).

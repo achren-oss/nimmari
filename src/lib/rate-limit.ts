@@ -9,7 +9,7 @@ const WINDOW_MS = 60_000;
 
 /** Shared fixed windows. Only trust IP headers overwritten by the deployment proxy. */
 export class FixedWindowLimiter {
-  constructor(private database: Pick<typeof client, "execute"> = client) {}
+  constructor(private database: Pick<typeof client, "execute"> = client, private windowMs = WINDOW_MS, private failClosed = false) {}
 
   async check(key: string, limit: number, now = Date.now()): Promise<Response | null> {
     return (await this.checkWithCount(key, limit, now)).response;
@@ -17,7 +17,7 @@ export class FixedWindowLimiter {
 
   async checkWithCount(key: string, limit: number, now = Date.now()): Promise<RateLimitResult> {
     const digest = createHash("sha256").update(key).digest("hex");
-    const start = Math.floor(now / WINDOW_MS) * WINDOW_MS;
+    const start = Math.floor(now / this.windowMs) * this.windowMs;
     try {
       let result;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -58,26 +58,27 @@ export class FixedWindowLimiter {
         try {
           await this.database.execute({
             sql: "DELETE FROM rate_limit_bucket WHERE window_start < ?",
-            args: [start - WINDOW_MS],
+            // Retain longer setup windows when signing checks run cleanup.
+            args: [start - Math.max(this.windowMs, 600_000)],
           });
         } catch (error) { logFailure("Rate limit bucket cleanup failed", error, key, digest); }
       }
       const response = count > limit ? Response.json({ error: "Too many requests" }, {
         status: 429,
-        headers: { "Retry-After": String(Math.max(1, Math.ceil((windowStart + WINDOW_MS - now) / 1000))) },
+        headers: { "Retry-After": String(Math.max(1, Math.ceil((windowStart + this.windowMs - now) / 1000))) },
       }) : null;
       return { response, count };
     } catch (error) {
       // Signing remains available during database failures. Never log keys or IPs.
-      logFailure("Database rate limit check failed; allowing request", error, key, digest);
-      return { response: null, count: null };
+      logFailure(this.failClosed ? "Database rate limit check failed; rejecting request" : "Database rate limit check failed; allowing request", error, key, digest);
+      return { response: this.failClosed ? Response.json({ error: "Rate limiter unavailable" }, { status: 503 }) : null, count: null };
     }
   }
 }
 
 function logFailure(context: string, error: unknown, key: string, digest: string) {
   // Drivers may include SQL arguments in messages; redact bucket identifiers.
-  const ip = key.startsWith("sign-ip:") ? key.slice(8) : key.startsWith("auth:") ? key.slice(5) : null;
+  const ip = key.startsWith("sign-ip:") ? key.slice(8) : key.startsWith("auth:") ? key.slice(5) : key.startsWith("setup:") ? key.slice(6) : null;
   const redact = (value: string) => [key, digest, ip].reduce<string>(
     (message, secret) => secret ? message.split(secret).join("[redacted]") : message, value,
   );

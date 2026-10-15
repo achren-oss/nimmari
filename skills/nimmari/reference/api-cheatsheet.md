@@ -5,7 +5,7 @@ Use `NIMMARI_BASE_URL` as the client instance URL and
 Use a provisioned regular database key on the client. The server root
 `NIMMARI_API_KEY` needs `NIMMARI_API_OWNER_ID` only for document requests.
 `NIMMARI_BASE_URL` is not a server environment variable; server signing links
-use `APP_URL` (fallback `http://localhost:3000`). Never log the key.
+use APP_URL → BETTER_AUTH_URL → RENDER_EXTERNAL_URL → `http://localhost:3000`. Never log the key.
 
 ## Routes and bodies
 
@@ -422,3 +422,19 @@ registered in the Drizzle journal. Run
 `node --env-file=.env.local scripts/migrate.mjs` before deployment.
 
 Machine-readable API: [OpenAPI](../../../openapi/current.yaml).
+
+## One-time setup claim
+
+No bearer authentication is required. All responses use Cache-Control: no-store.
+Configure NIMMARI_SETUP_CODE (or deprecated PUUMERKKI_SETUP_CODE), at least 32 characters.
+GET /api/setup/claim returns only {enabled:boolean,claimed:boolean}.
+POST /api/setup/claim accepts {setupCode,email,name,password?}. On 201 it returns
+{account:{id,email,name},password?,adminKey:{id,key,scope},agentKey:{id,key,scope},baseUrl}.
+The generated password is returned only when omitted in the request. Keys are returned once;
+store them privately. The admin key administers all accounts/keys; the regular key acts on
+its owner's documents. Both store only hashes and retain the pmk_ prefix.
+Errors: 404 disabled/missing/short code, 403 wrong code, 410 {error:"already_claimed"},
+409 existing account, 400 invalid account input, 429 after 10 attempts per IP per
+10-minute fixed window, 503 if the rate limiter cannot safely check.
+Claim, account, credential and key writes share one transaction; failures roll back.
+Apply journaled migration 0008_setup_claim.sql before deployment.

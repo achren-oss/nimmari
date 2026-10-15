@@ -1,3 +1,4 @@
+import { authBaseUrl } from "@/lib/app-url";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db";
@@ -44,7 +45,8 @@ export const auth = betterAuth({
     },
   },
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: authBaseUrl(),
+  ...(process.env.RENDER_EXTERNAL_URL ? { trustedOrigins: [process.env.RENDER_EXTERNAL_URL] } : {}),
 });
 
 export type Session = typeof auth.$Infer.Session;

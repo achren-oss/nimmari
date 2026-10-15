@@ -27,3 +27,15 @@ Nimmari is self-hosted. Self-hosters are responsible for their deployments, incl
 - Signer and bearer-failure limits are shared across instances via the database, use SHA-256 bucket keys, and fail open with a server log if the database check fails. Better Auth login/sign-up limits also use database storage. Run migrations before deploying (including `0007_rate_limits.sql`). Limits are not a distributed denial-of-service defense; edge rate limiting remains useful. Client IP resolution prefers `X-Vercel-Forwarded-For`, then `X-Real-IP`, then the first `X-Forwarded-For` address. Per-IP limits depend on the proxy supplying the correct client-IP header; a shared proxy address collapses clients into one budget, and a missing address uses a shared `unknown` bucket. Configure the reverse proxy to overwrite trusted IP headers; direct clients must not be able to spoof them.
 - Responses set CSP, deny framing, disable MIME sniffing, suppress referrers (including signing tokens), disable camera/microphone/geolocation, and advertise two-year HSTS including subdomains. HSTS takes effect over HTTPS. CSP permits inline styles and scripts needed by the app, same-origin PDF.js workers, and data/blob image previews; it is defense in depth alongside HTML sanitization. Production does not enable script evaluation; development permits it and WebSockets for Next.js.
 - Signatures are Simple Electronic Signatures (SES) only. There is no identity verification, certificate-backed PAdES signature, or trusted timestamp service. Audit hashes support integrity checking; they do not establish signer identity.
+
+## Initial setup threat model
+
+The setup code grants first-account ownership and returns an admin key. Generate at least
+32 unpredictable characters, transmit only to the intended operator, and protect local
+files with mode 600. The code is hashed for constant-time comparison and attempts are
+limited through shared database counters (fail closed). A primary-key claim and all
+provisioning writes commit atomically. Existing accounts block bootstrap. After claim,
+the code cannot be reused even if the account is later removed. Remove the environment
+code after success if desired. A lost success response cannot recover plaintext keys;
+inspect state before retrying. An unexpected claimed state means possible compromise:
+delete the service and database and redeploy. Never log setup codes or returned keys.

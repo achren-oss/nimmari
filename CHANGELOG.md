@@ -2,9 +2,17 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.0] - 2026-10-15
 
-- Make free hosted Render + Turso the default agent installation, using HTTP APIs and the pinned 1.2.0 image; retain explicit local Docker setup and silent synthetic verification.
+### Added
+
+- One-time, rate-limited setup claim creates the first account and admin/regular API keys atomically.
+- Deploy to Render button and prebuilt-image Blueprint with agent setup runbook.
+
+### Changed
+
+- Public and authentication URLs fall back to Render's automatic service URL.
+- Make the Deploy to Render button the default agent installation with the pinned 1.3.0 image; retain alternative provider API provisioning, explicit local Docker setup, and silent synthetic verification.
 
 ### Fixed
 
@@ -16,7 +24,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Introduce `NIMMARI_*` configuration with deprecated `PUUMERKKI_*` fallback aliases.
 - Move the portable skill to `skills/nimmari` and rename its flow script to `nimmari_flow.py`.
 - Preserve existing keys, stored identifiers, and databases. Docker reuses the legacy database on existing volumes; new installs use `/data/nimmari.db`.
-- Upgrade: change the image to `ghcr.io/achren-oss/nimmari:1.2.0`, retain the existing volume, and update installed skill paths. Existing environment variables continue to work. See [upgrade guide](docs/release-notes-v1.2.0.md).
+- Upgrade: change the image to `ghcr.io/achren-oss/nimmari:1.3.0`, retain the existing volume, and update installed skill paths. Existing environment variables continue to work. See [upgrade guide](docs/release-notes-v1.2.0.md).
 
 
 ### Added

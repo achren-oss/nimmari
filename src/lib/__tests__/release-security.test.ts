@@ -29,6 +29,7 @@ it("requires an authentication guard on every API route", () => {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? routes(join(dir, entry.name)) : entry.name === "route.ts" ? [join(dir, entry.name)] : []);
   }
   const exceptions: Record<string, RegExp> = {
+    "setup/claim/route.ts": /timingSafeEqual\(hash\(body.setupCode\), hash\(code\)\)/,
     "health/route.ts": /export async function GET/,
     "auth/[...all]/route.ts": /toNextJsHandler\(auth\)/,
     "webhooks/resend/route.ts": /if \(!verify\(rawBody, req.headers, secret\)\)/,

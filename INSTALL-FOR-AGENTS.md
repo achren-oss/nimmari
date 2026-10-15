@@ -1,6 +1,120 @@
 # Install Nimmari: runbook for AI agents
 
-The **default is a free hosted Render web service + Turso libSQL database**, installed by the agent through HTTP APIs. Do not ask where to install. Run the Bash blocks in order in the same shell. No Render or Turso CLI, repository fork, local Docker, or paid plan is required. Pin the prebuilt image to `ghcr.io/achren-oss/nimmari:1.2.0`. See [AGENTS.md](AGENTS.md) for real-document rules; never fill or sign for a person.
+The default is the **Deploy to Render button + Turso**, with no fork, provider API keys,
+or local Docker required. Use the prebuilt 1.3.0 image. Keep all credentials outside the
+repository. See AGENTS.md for real-document rules.
+
+## Step 0: generate a setup code and send one message
+
+With tracing disabled, create a new private installation directory (inspect existing state
+instead of overwriting it):
+
+```bash
+set +x
+umask 077
+INSTALL_DIR="$HOME/.config/nimmari"
+mkdir -p "$HOME/.config"
+mkdir "$INSTALL_DIR"
+export INSTALL_DIR
+openssl rand -hex 24 > "$INSTALL_DIR/setup-code"
+chmod 600 "$INSTALL_DIR/setup-code"
+```
+
+Read the code privately and send ONE message containing the generated 48-character code:
+
+> I'll finish Nimmari setup and make a silent synthetic test link, without signing.
+> 1. Open https://app.turso.tech and sign in with GitHub, Google, or email (free, no
+> card). Create a database with any name, for example nimmari. Copy its libsql:// URL
+> and create a read+write database token. Put these only in the Render form, not in chat.
+> 2. Open https://render.com/deploy?repo=https://github.com/achren-oss/nimmari and sign
+> in with GitHub, GitLab, Google, or email (free, no card). Fill DATABASE_URL,
+> DATABASE_AUTH_TOKEN and NIMMARI_SETUP_CODE=<generated code>, then click Deploy Blueprint.
+> 3. Paste back the https://...onrender.com service URL, plus the email and name for
+> the first account. The setup code becomes useless after I claim it, which is why
+> it is OK in this chat. Your database token is never shared with me.
+
+Wait for the URL and account details; never invent them. Do not request provider tokens.
+
+## Claim and protect the returned credentials
+
+Wait for GET /api/health to return JSON with status "ok". The first deployment takes a
+few minutes; allow up to ten minutes and inspect the dashboard on failure. Render sleeps
+after 15 minutes idle and a cold start takes about one minute. Use bounded HTTP timeouts.
+
+GET /api/setup/claim must report enabled:true and claimed:false. Set PUBLIC_URL,
+OWNER_EMAIL and OWNER_NAME from the user's reply, then run:
+
+```bash
+set +x
+export PUBLIC_URL OWNER_EMAIL OWNER_NAME
+python3 - <<'PY'
+import json, os, pathlib, shlex, urllib.request
+root = pathlib.Path(os.environ['INSTALL_DIR'])
+url = os.environ['PUBLIC_URL'].rstrip('/')
+body = dict(setupCode=(root/'setup-code').read_text().strip(),
+            email=os.environ['OWNER_EMAIL'], name=os.environ['OWNER_NAME'])
+request = urllib.request.Request(url+'/api/setup/claim', data=json.dumps(body).encode(),
+    headers={'Content-Type':'application/json'}, method='POST')
+with urllib.request.urlopen(request, timeout=120) as response:
+    assert response.status == 201
+    result = json.load(response)
+for filename, key in [('server-admin.env','adminKey'),('agent.env','agentKey')]:
+    path = root/filename
+    with path.open('x') as output:
+        output.write('NIMMARI_API_KEY='+shlex.quote(result[key]['key'])+'\n')
+        output.write('NIMMARI_BASE_URL='+shlex.quote(result['baseUrl'])+'\n')
+    path.chmod(0o600)
+path = root/'account-once.json'
+with path.open('x') as output:
+    json.dump(dict(result['account'], password=result['password']), output)
+path.chmod(0o600)
+(root/'setup-code').unlink()
+PY
+```
+
+Never print the claim response. Hand the password over once privately with the login URL
+and email, or have the user read account-once.json locally if no private channel exists.
+Remove that file after handoff. Keep server-admin.env securely for administration; load
+only agent.env into the document agent. A timeout may mean the claim succeeded: inspect
+GET state before retrying; plaintext credentials cannot be recovered.
+
+Install the portable skill and run the **same silent synthetic smoke test in steps 7–8
+below**, starting at “Install the portable skill”; load agent.env first. Use only the
+example.com signer, preview placement, verify emailSent:false, and never sign. Report
+the service/login URL, account email, private credential file locations, password
+handoff status, cold-start behavior, and synthetic link privately. No keys or password
+belong in the report. Keep the database token solely in Render.
+
+## Button-flow troubleshooting
+
+- Claim 404: missing/short code. Set NIMMARI_SETUP_CODE (32+ characters) in Render
+  dashboard Environment; saving redeploys the service.
+- Claim 410: already claimed. If not by you, treat the instance as compromised:
+  delete the service and database and redeploy.
+- Claim 409: an account already exists, so bootstrap is refused without consuming the
+  claim. Use existing administrator credentials; never silently replace accounts.
+- Claim 429: wait for the ten-minute window. Claim 503: inspect database availability.
+- Health failure: inspect Render logs privately; do not create duplicate services.
+
+## Honest hosting notes
+
+A Turso account is still needed: [Render Free](https://render.com/docs/free) has no
+persistent disk. Its free Postgres expires 30 days after creation and is deleted after
+a 14-day grace period. Nimmari supports only SQLite/libSQL; ephemeral SQLite would lose
+signed documents. Keep within free quotas.
+
+The [Deploy button](https://render.com/docs/deploy-to-render) works out of the box for
+public repositories according to Render's docs. Whether the dashboard asks to connect
+a Git provider has not been verified. The [Blueprint](https://render.com/docs/infrastructure-as-code)
+auto-syncs changes on the linked branch by default: changing its image tag updates
+instances. sync:false values are prompted only on initial creation.
+[RENDER_EXTERNAL_URL](https://render.com/docs/environment-variables) supplies the service
+URL automatically, so APP_URL and BETTER_AUTH_URL are unnecessary for this flow.
+
+## Alternative: agent-driven deploy via Render/Turso API keys
+
+The following existing API-key procedure remains available when explicitly chosen.
+Its numbered steps are independent of the button flow.
 
 ## Free hosting facts (checked 14 October 2026)
 
@@ -147,7 +261,7 @@ import json, os, pathlib
 root = pathlib.Path(os.environ['INSTALL_DIR'])
 env = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
 body = {'type': 'web_service', 'name': 'nimmari', 'ownerId': os.environ['RENDER_OWNER_ID'],
-    'image': {'ownerId': os.environ['RENDER_OWNER_ID'], 'imagePath': 'ghcr.io/achren-oss/nimmari:1.2.0'},
+    'image': {'ownerId': os.environ['RENDER_OWNER_ID'], 'imagePath': 'ghcr.io/achren-oss/nimmari:1.3.0'},
     'serviceDetails': {'runtime': 'image', 'plan': 'free', 'region': 'frankfurt',
         'healthCheckPath': '/api/health', 'numInstances': 1},
     'envVars': [{'key': k, 'value': v} for k, v in env.items()]}
@@ -278,12 +392,12 @@ code=$(printf 'Authorization: Bearer %s\n' "$NIMMARI_API_KEY" | \
 
 ### Install the portable skill
 
-Use an existing repository clone, or shallow-clone the release (git is optional if the source is already available; otherwise download and unpack the v1.2.0 source archive with curl):
+Use an existing repository clone, or shallow-clone the release (git is optional if the source is already available; otherwise download and unpack the v1.3.0 source archive with curl):
 
 ```bash
 set +x
 # Skip this clone/cd pair when already in the repository.
-git clone --depth 1 --branch v1.2.0 https://github.com/achren-oss/nimmari "$INSTALL_DIR/source"
+git clone --depth 1 --branch v1.3.0 https://github.com/achren-oss/nimmari "$INSTALL_DIR/source"
 cd "$INSTALL_DIR/source"
 ```
 
@@ -469,7 +583,7 @@ docker run -d --name nimmari --restart unless-stopped \
   -p "$PORT:3000" -v nimmari-data:/data \
   --env-file "$SERVER_ENV" \
   -e BETTER_AUTH_URL="$PUBLIC_URL" -e APP_URL="$PUBLIC_URL" \
-  ghcr.io/achren-oss/nimmari:1.2.0
+  ghcr.io/achren-oss/nimmari:1.3.0
 
 healthy=false
 for attempt in {1..60}; do

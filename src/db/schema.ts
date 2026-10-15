@@ -160,3 +160,9 @@ export const rateLimit = sqliteTable("rate_limit", {
   count: integer("count").notNull(),
   lastRequest: integer("last_request").notNull(),
 });
+
+export const setupClaim = sqliteTable("setup_claim", {
+  id: text("id").primaryKey(),
+  claimedAt: integer("claimed_at", { mode: "timestamp" }),
+  userId: text("user_id"),
+});

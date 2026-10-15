@@ -30,20 +30,20 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    PUPPETEER_NO_SANDBOX=1 \
-    DATABASE_URL=file:/data/puumerkki.db
-RUN groupadd --system --gid 1001 puumerkki \
- && useradd --system --uid 1001 --gid puumerkki --home /app puumerkki \
- && mkdir -p /data && chown puumerkki:puumerkki /data
-COPY --from=build --chown=puumerkki:puumerkki /app/.next/standalone ./
-COPY --from=build --chown=puumerkki:puumerkki /app/.next/static ./.next/static
-COPY --from=build --chown=puumerkki:puumerkki /app/public ./public
-COPY --from=migrator --chown=puumerkki:puumerkki /migrator/node_modules ./migrator/node_modules
-COPY --chown=puumerkki:puumerkki drizzle ./migrator/drizzle
-COPY --chown=puumerkki:puumerkki scripts/migrate.mjs ./migrator/scripts/migrate.mjs
-USER puumerkki
+    PUPPETEER_NO_SANDBOX=1
+RUN groupadd --system --gid 1001 nimmari \
+ && useradd --system --uid 1001 --gid nimmari --home /app nimmari \
+ && mkdir -p /data && chown nimmari:nimmari /data
+COPY --from=build --chown=nimmari:nimmari /app/.next/standalone ./
+COPY --from=build --chown=nimmari:nimmari /app/.next/static ./.next/static
+COPY --from=build --chown=nimmari:nimmari /app/public ./public
+COPY --from=migrator --chown=nimmari:nimmari /migrator/node_modules ./migrator/node_modules
+COPY --chown=nimmari:nimmari drizzle ./migrator/drizzle
+COPY --chown=nimmari:nimmari scripts/migrate.mjs ./migrator/scripts/migrate.mjs
+COPY --chown=nimmari:nimmari scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+USER nimmari
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:${PORT}/api/health || exit 1
 # Apply migrations (idempotent), then start the server.
-CMD ["sh", "-c", "node migrator/scripts/migrate.mjs && exec node server.js"]
+CMD ["sh", "./docker-entrypoint.sh"]

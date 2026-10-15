@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 const local = vi.hoisted(() => ({ session: vi.fn(), db: undefined as unknown, client: undefined as unknown }));
 vi.mock("@/db", () => ({ get db() { return local.db; }, get client() { return local.client; } }));
 vi.mock("@/lib/session", () => ({ getServerSession: local.session }));
-const directory = await mkdtemp("/tmp/puumerkki-auth-test-");
+const directory = await mkdtemp("/tmp/nimmari-auth-test-");
 const client = createClient({ url: `file:${directory}/test.db` });
 const database = drizzle(client, { schema });
 local.db = database;
@@ -29,13 +29,13 @@ beforeAll(async () => {
   await migrate(database, { migrationsFolder: "drizzle" });
 });
 afterAll(async () => { client.close(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
-beforeEach(() => { local.session.mockReset().mockResolvedValue(null); vi.stubEnv("PUUMERKKI_API_KEY", "test-root-key"); vi.stubEnv("PUUMERKKI_API_OWNER_ID", ""); });
+beforeEach(() => { local.session.mockReset().mockResolvedValue(null); vi.stubEnv("NIMMARI_API_KEY", "test-root-key"); vi.stubEnv("NIMMARI_API_OWNER_ID", ""); });
 
 describe("API key authentication and provisioning", () => {
   it("allows the existing root environment key to bootstrap, but requires an owner for document identity", async () => {
     expect(await getApiIdentity(request("test-root-key"))).toBeNull();
     expect(await getApiIdentity(request("test-root-key"), { allowOwnerlessRoot: true })).toMatchObject({ via: "root", scope: "admin", userId: "" });
-    vi.stubEnv("PUUMERKKI_API_OWNER_ID", "owner");
+    vi.stubEnv("NIMMARI_API_OWNER_ID", "owner");
     expect(await getApiIdentity(request("test-root-key"))).toMatchObject({ userId: "owner" });
   });
   it("rejects missing, invalid, and session credentials for agent endpoints", async () => {
@@ -158,9 +158,9 @@ describe("account management", () => {
 
   it("protects configured owners, the caller, and accounts with documents", async () => {
     const owner = await provision("protected@example.com");
-    vi.stubEnv("PUUMERKKI_API_OWNER_ID", owner.id);
+    vi.stubEnv("NIMMARI_API_OWNER_ID", owner.id);
     expect((await remove("test-root-key", owner.id)).status).toBe(409);
-    vi.stubEnv("PUUMERKKI_API_OWNER_ID", "");
+    vi.stubEnv("NIMMARI_API_OWNER_ID", "");
     const admin = await (await keys.POST(request("test-root-key", { name: "Admin", scope: "admin", ownerUserId: owner.id }))).json();
     expect((await remove(admin.key, owner.id)).status).toBe(409);
     await database.insert(schema.document).values({ id: "protected-document", ownerId: owner.id, title: "Keep", createdAt: new Date(), updatedAt: new Date() });

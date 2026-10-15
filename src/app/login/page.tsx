@@ -27,7 +27,7 @@ export default function LoginPage() {
   return (
     <main className="auth-shell">
       <header className="app-top">
-        <div className="wm">Puumerkki<span className="amp">.</span></div>
+        <div className="wm">Nimmari<span className="amp">.</span></div>
         <div className="tagline">— back to your desk.</div>
         <div className="ornament">· · ·</div>
       </header>

@@ -21,7 +21,7 @@ export type AcroFormImportResult = {
 const RENDER_WIDTH = 800;
 
 /**
- * Extracts AcroForm fields from a fillable PDF and returns them in Puumerkki's
+ * Extracts AcroForm fields from a fillable PDF and returns them in Nimmari's
  * field format, ready to be persisted and rendered as overlays.
  */
 export async function extractAcroFormFields(pdfBytes: Uint8Array): Promise<AcroFormImportResult> {
@@ -43,7 +43,7 @@ export async function extractAcroFormFields(pdfBytes: Uint8Array): Promise<AcroF
     }
 
     // Each field can have multiple widgets (appearances on different pages).
-    // We create one Puumerkki field per widget.
+    // We create one Nimmari field per widget.
     for (const widget of widgets) {
       try {
         const pageRef = widget.P();

@@ -9,7 +9,7 @@ export default async function HomePage() {
   return (
     <main className="page-shell narrow" style={{ textAlign: "center", paddingTop: "10vh" }}>
       <header className="app-top">
-        <div className="wm">Puumerkki<span className="amp">.</span></div>
+        <div className="wm">Nimmari<span className="amp">.</span></div>
         <div className="tagline">— a quiet desk for documents that need a signature.</div>
         <div className="ornament">· · ·</div>
       </header>

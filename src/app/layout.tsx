@@ -34,7 +34,7 @@ const mrDafoe = Mr_Dafoe({
 });
 
 export const metadata: Metadata = {
-  title: "Puumerkki",
+  title: "Nimmari",
   description: "A quiet desk for documents that need a signature.",
 };
 

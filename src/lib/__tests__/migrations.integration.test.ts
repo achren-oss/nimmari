@@ -14,7 +14,7 @@ afterEach(() => { for (const directory of directories.splice(0)) rmSync(director
 describe("journaled OSS migrations", () => {
   for (const upgrade of [false, true]) {
     it(upgrade ? "upgrades v1.0.0 without losing records and is repeatable" : "creates a fresh database matching the current schema", async () => {
-      const directory = mkdtempSync(join(tmpdir(), "puumerkki-migrations-"));
+      const directory = mkdtempSync(join(tmpdir(), "nimmari-migrations-"));
       directories.push(directory);
       const client = createClient({ url: `file:${join(directory, "test.db")}` });
       try {

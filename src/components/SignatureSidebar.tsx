@@ -61,7 +61,7 @@ export const SignatureSidebar = forwardRef<SignatureSidebarHandle, Props>(functi
       <h3>Your signature</h3>
       {!isLoggedIn && (
         <p className="side-hint">
-          Tip: create a Puumerkki account and your signature will be saved
+          Tip: create a Nimmari account and your signature will be saved
           for any future documents.
         </p>
       )}

@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   if (!who || who.via === "session" || who.scope !== "admin") return authenticationFailure(req);
   const t0 = Date.now();
   try {
-    const pdf = await renderHtmlToPdf("<html><body><p>Puumerkki PDF self-check</p></body></html>");
+    const pdf = await renderHtmlToPdf("<html><body><p>Nimmari PDF self-check</p></body></html>");
     return NextResponse.json({ status: "ok", ms: Date.now() - t0, bytes: pdf.length });
   } catch (e) {
     const err = e as Error;

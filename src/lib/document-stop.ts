@@ -1,3 +1,4 @@
+import { nimmariEnv } from "@/lib/env";
 import { writeTransaction } from "@/lib/write-transaction";
 import { NextResponse } from "next/server";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -31,7 +32,7 @@ export async function stopDocument(docId: string, mode: "cancelled" | "declined"
     event: `document.${mode}`, [mode === "cancelled" ? "cancelledAt" : "declinedAt"]: now.toISOString(),
     reason, document: { id: result.id, title: result.title, kind: result.kind, status: mode },
     ...(sessionId ? { signingSessionId: sessionId } : {}),
-  }, process.env.PUUMERKKI_WEBHOOK_SECRET);
+  }, nimmariEnv("WEBHOOK_SECRET"));
   if (mode === "declined" && result.notify) {
     const [owner] = await db.select().from(user).where(eq(user.id, result.ownerId));
     if (owner) await sendDeclinedEmail({ to: owner.email, documentTitle: result.title, reason });

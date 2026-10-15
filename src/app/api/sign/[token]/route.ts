@@ -1,3 +1,4 @@
+import { nimmariEnv } from "@/lib/env";
 import { clientIp, rateLimitIpDebugHeaders } from "@/lib/client-ip";
 import { fieldMatchesSigner } from "@/lib/signer-assignment";
 import { writeTransaction } from "@/lib/write-transaction";
@@ -34,7 +35,7 @@ export async function GET(
   const { token } = await params;
   const { response: limited, count } = await signRateLimitWithCount(req, token);
   const withRateLimitCount = (response: Response) => {
-    if (process.env.PUUMERKKI_RATE_LIMIT_DEBUG === "1") {
+    if (nimmariEnv("RATE_LIMIT_DEBUG") === "1") {
       for (const [name, value] of Object.entries(rateLimitIpDebugHeaders(req))) response.headers.set(name, value);
       if (count !== null) response.headers.set("X-RateLimit-Count", String(count));
     }
@@ -313,7 +314,7 @@ export async function POST(
     await sendSigningEmail({
       to: nextSigner.recipientEmail,
       recipientName: nextSigner.recipientName ?? undefined,
-      senderName: "Puumerkki",
+      senderName: "Nimmari",
       documentTitle: doc.title,
       url: `${appUrl}/sign/${nextSigner.token}`,
       signingSessionId: nextSigner.id,
@@ -336,7 +337,7 @@ export async function POST(
 
   // If all signers have signed and there's a webhook URL, POST to it
   if (allSigned && doc.webhookUrl) {
-    const webhookSecret = process.env.PUUMERKKI_WEBHOOK_SECRET;
+    const webhookSecret = nimmariEnv("WEBHOOK_SECRET");
     const result = await sendWebhook(
       doc.webhookUrl,
       {
@@ -416,7 +417,7 @@ async function sendSignedNotices(args: {
       html: `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1d2839;">
   <p>${who} just signed <strong>${title}</strong>.</p>
   ${button(ownerPdfUrl, "View signed PDF →")}
-  <p style="color:#5a4a31;font-size:13px;">Or open the document in Puumerkki: <a href="${appUrl}/documents/${args.documentId}" style="color:#5a4a31;">${appUrl}/documents/${args.documentId}</a></p>
+  <p style="color:#5a4a31;font-size:13px;">Or open the document in Nimmari: <a href="${appUrl}/documents/${args.documentId}" style="color:#5a4a31;">${appUrl}/documents/${args.documentId}</a></p>
 </div>`,
     }),
   ]);

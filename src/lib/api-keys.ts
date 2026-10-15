@@ -1,3 +1,4 @@
+import { nimmariEnv } from "@/lib/env";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 export function hashApiKey(key: string): string {
@@ -5,7 +6,7 @@ export function hashApiKey(key: string): string {
 }
 
 export function matchesRootKey(key: string): boolean {
-  const root = process.env.PUUMERKKI_API_KEY;
+  const root = nimmariEnv("API_KEY");
   return !!root && timingSafeEqual(Buffer.from(hashApiKey(key), "hex"), Buffer.from(hashApiKey(root), "hex"));
 }
 

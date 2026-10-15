@@ -27,7 +27,7 @@ import { GET as readDocument } from "@/app/api/documents/[id]/route";
 import { GET as documentPdf } from "@/app/api/documents/[id]/pdf/route";
 import { rebuildSignedArtifact } from "@/lib/rebuild-signed-artifact";
 
-const directory = mkdtempSync("/tmp/puumerkki-test-");
+const directory = mkdtempSync("/tmp/nimmari-test-");
 const client = createClient({ url: `file:${directory}/test.db` });
 const db = drizzle(client, { schema });
 const SIG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=";
@@ -325,9 +325,9 @@ describe("post-signing email outcomes", () => {
 });
 
 it("adds signing GET debug counts to allowed and limited responses only when enabled", async () => {
-  const original = process.env.PUUMERKKI_RATE_LIMIT_DEBUG;
+  const original = process.env.NIMMARI_RATE_LIMIT_DEBUG;
   try {
-    process.env.PUUMERKKI_RATE_LIMIT_DEBUG = "1";
+    process.env.NIMMARI_RATE_LIMIT_DEBUG = "1";
     const allowed = await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"));
     expect(allowed.status).toBe(404);
     expect(allowed.headers.get("X-RateLimit-Count")).toBe("1");
@@ -341,15 +341,15 @@ it("adds signing GET debug counts to allowed and limited responses only when ena
     expect(limited.status).toBe(429);
     expect(limited.headers.get("X-RateLimit-Count")).toBe("61");
     state.rateLimit = { response: null, count: 1 };
-    process.env.PUUMERKKI_RATE_LIMIT_DEBUG = "0";
+    process.env.NIMMARI_RATE_LIMIT_DEBUG = "0";
     expect((await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"))).headers.has("X-RateLimit-IpKey")).toBe(false);
     expect((await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"))).headers.has("X-RateLimit-Count")).toBe(false);
-    process.env.PUUMERKKI_RATE_LIMIT_DEBUG = "1";
+    process.env.NIMMARI_RATE_LIMIT_DEBUG = "1";
     state.rateLimit.count = null;
     expect((await readSign(new Request("http://localhost"), tokenParams("missing-debug-token"))).headers.has("X-RateLimit-Count")).toBe(false);
   } finally {
     state.rateLimit = { response: null, count: 1 };
-    if (original === undefined) delete process.env.PUUMERKKI_RATE_LIMIT_DEBUG;
-    else process.env.PUUMERKKI_RATE_LIMIT_DEBUG = original;
+    if (original === undefined) delete process.env.NIMMARI_RATE_LIMIT_DEBUG;
+    else process.env.NIMMARI_RATE_LIMIT_DEBUG = original;
   }
 });

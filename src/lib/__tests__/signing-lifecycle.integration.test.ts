@@ -137,7 +137,7 @@ async function prepareRoles(keys = true) {
   await db.update(schema.document).set({ status: "draft", auditTimezone: "Europe/Helsinki" });
   const fields = ["seller", "guarantor"].flatMap((key, index) => [
     { type: "signature", name: `${key}-signature`, page: 0, x: 40 + index * 300, y: 100, width: 150, height: 50, assignedToSignerEmail: "same@example.com", ...(keys ? { assignedSignerKey: key } : {}) },
-    { type: "text", name: `${key}-private`, page: 0, x: 40 + index * 300, y: 200, width: 150, height: 30, privateForOtherSigners: true, assignedToSignerEmail: "same@example.com", ...(keys ? { assignedSignerKey: key } : {}) },
+    { type: "text", required: true, name: `${key}-private`, page: 0, x: 40 + index * 300, y: 200, width: 150, height: 30, privateForOtherSigners: true, assignedToSignerEmail: "same@example.com", ...(keys ? { assignedSignerKey: key } : {}) },
   ]);
   expect((await putFields(request({ fields }), docParams())).status).toBe(200);
   const response = await send(request({ notify: false, signers: [
@@ -352,4 +352,80 @@ it("adds signing GET debug counts to allowed and limited responses only when ena
     if (original === undefined) delete process.env.NIMMARI_RATE_LIMIT_DEBUG;
     else process.env.NIMMARI_RATE_LIMIT_DEBUG = original;
   }
+});
+
+
+describe("field defaults and safe editing", () => {
+  const geometry = { page: 0, x: 40, y: 40, width: 150, height: 40 };
+  it.each(["text", "textarea", "date", "hetu", "checkbox"])("allows empty optional %s fields", async (type) => {
+    const response = await putFields(request({ fields: [{ type, ...geometry }] }), docParams());
+    expect(response.status).toBe(200);
+    const [row] = await db.select().from(schema.field);
+    expect(row.required).toBe(false);
+    expect(row.name).toBeTruthy();
+    expect((await sign(request({ values: {}, signaturePng: null }), tokenParams("t0"))).status).toBe(200);
+  });
+  it("enforces explicitly required text", async () => {
+    await putFields(request({ fields: [{ type: "text", required: true, ...geometry }] }), docParams());
+    expect((await sign(request({ values: {}, signaturePng: null }), tokenParams("t0"))).status).toBe(400);
+  });
+  it.each(["pdf", "html"])("always requires visible signatures for %s", async (kind) => {
+    await db.update(schema.document).set({ kind: kind as "pdf" | "html", htmlSource: '<div data-pm-field="sig" class="pm-signature"></div>' });
+    await putFields(request({ fields: [{ type: "signature", name: "sig", required: false, ...geometry }] }), docParams());
+    const response = await sign(request({ values: {}, signaturePng: null }), tokenParams("t0"));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: "Signature required" });
+  });
+  it("defaults signatures to required", async () => {
+    await putFields(request({ fields: [{ type: "signature", ...geometry }] }), docParams());
+    expect((await db.select().from(schema.field))[0].required).toBe(true);
+  });
+  it.each(["draft", "sent"])("preserves metadata and ids when editing %s documents", async (status) => {
+    await db.update(schema.document).set({ status: status as "draft" | "sent" });
+    await db.update(schema.field).set({ name: "known", value: "Acme", prefilled: true, privateForOtherSigners: true, assignedSignerKey: "role" }).where(eq(schema.field.id, "f0"));
+    const result = await putFields(request({ fields: [{ id: "f0", type: "signature", ...geometry, label: "Updated" }] }), docParams());
+    expect(result.status).toBe(200);
+    expect(await db.select().from(schema.field)).toMatchObject([{ id: "f0", label: "Updated", name: "known", value: "Acme", prefilled: true, privateForOtherSigners: true, assignedSignerKey: "role", assignedToSignerEmail: "signer0@example.com" }]);
+    expect((await db.select().from(schema.document))[0].version).toBe(1);
+  });
+  it.each(["completed", "cancelled", "declined"])("rejects edits of %s documents", async (status) => {
+    await db.update(schema.document).set({ status: status as "completed" | "cancelled" | "declined" });
+    expect((await putFields(request({ fields: [] }), docParams())).status).toBe(409);
+  });
+  it("applies explicit metadata changes while preserving omitted properties", async () => {
+    const response = await putFields(request({ fields: [{ id: "f0", type: "text", ...geometry,
+      name: "new_name", value: "New", prefilled: true, privateForOtherSigners: true,
+      assignedSignerKey: "new-role", assignedToSignerEmail: null, required: true,
+    }] }), docParams());
+    expect(response.status).toBe(200);
+    expect((await db.select().from(schema.field))[0]).toMatchObject({ id: "f0", name: "new_name", value: "New", prefilled: true, privateForOtherSigners: true, assignedSignerKey: "new-role", assignedToSignerEmail: null, required: true });
+  });
+  it("exposes sent field changes on the next signer GET without emails", async () => {
+    state.email.mockClear();
+    expect((await putFields(request({ fields: [{ id: "f0", type: "signature", ...geometry, label: "New label" }] }), docParams())).status).toBe(200);
+    const response = await readSign(request(), tokenParams("t0"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).fields).toMatchObject([{ id: "f0", label: "New label" }]);
+    expect(state.email).not.toHaveBeenCalled();
+  });
+  it("rejects edits after any signer signs", async () => {
+    await db.update(schema.signingSession).set({ signedAt: new Date() }).where(eq(schema.signingSession.id, "s0"));
+    const response = await putFields(request({ fields: [] }), docParams());
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toContain("already signed");
+    expect(await db.select().from(schema.field)).toHaveLength(3);
+  });
+  it("rejects unknown ids atomically", async () => {
+    expect((await putFields(request({ fields: [{ id: "unknown", type: "text", ...geometry }] }), docParams())).status).toBe(400);
+    expect(await db.select().from(schema.field)).toHaveLength(3);
+    expect((await db.select().from(schema.document))[0].version).toBe(0);
+  });
+  it("retains legacy replacement behavior without ids", async () => {
+    await putFields(request({ fields: [{ type: "text", ...geometry }] }), docParams());
+    const fields = await db.select().from(schema.field);
+    expect(fields).toHaveLength(1);
+    expect(fields[0].id).not.toBe("f0");
+    await putFields(request({ fields: [{ type: "text", ...geometry }] }), docParams());
+    expect((await db.select().from(schema.field))[0].id).not.toBe(fields[0].id);
+  });
 });

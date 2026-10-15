@@ -665,8 +665,12 @@ paths:
   /api/documents/{id}/fields:
     put:
       operationId: putApiDocumentsIdFields
-      summary: Replace draft PDF fields
-      description: Replaces all fields and generates new IDs. Coordinates are integers
+      summary: Edit draft or unsigned sent PDF fields
+      description: Existing IDs update in place and preserve omitted metadata and required flags.
+        Unknown or duplicate IDs return 400. Omitted fields are deleted; new fields
+        receive generated names. Requests without IDs replace all fields. Drafts and
+        sent documents without signed sessions may be edited; other states return 409.
+        Pending signers see changes on their next load; no emails are sent. Coordinates are integers
         on an 800px-wide page, zero-based page, top-left origin. Key assignment takes
         precedence over email. Completed PDFs expose all private values.
       responses:
@@ -1425,6 +1429,14 @@ components:
     FieldInput:
       type: object
       properties:
+        id:
+          type: string
+          minLength: 1
+          description: Existing field ID belonging to this document.
+        value:
+          type: [string, "null"]
+        prefilled:
+          type: boolean
         type:
           type: string
           enum:
@@ -1452,7 +1464,9 @@ components:
         label: *id001
         required:
           type: boolean
-          default: true
+          description: Defaults to true for signatures and false for other types on insert.
+            Visible signatures always require signing regardless of this flag.
+            HTML non-signature fields opt in via data-pm-required; existing stored flags are unchanged.
         privateForOtherSigners:
           type: boolean
           default: false

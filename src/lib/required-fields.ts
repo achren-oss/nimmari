@@ -16,7 +16,7 @@ export function shortFieldLabel(label: string | undefined): string {
 
 /** Fields the signer must fill or sign themselves (prefilled/locked excluded). */
 export function requiredForSigner<T extends RequiredCheckField>(fields: T[]): T[] {
-  return fields.filter((f) => f.required && !f.prefilled && !f.readOnly);
+  return fields.filter((f) => f.type === "signature" || (f.required && !f.prefilled && !f.readOnly));
 }
 
 function isFilled(f: RequiredCheckField, values: Record<string, string>, hasSignature: boolean) {

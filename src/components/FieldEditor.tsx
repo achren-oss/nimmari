@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Document, Page } from "react-pdf";
 import "@/components/PdfWorker";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -33,10 +34,17 @@ const DEFAULTS: Record<FieldType, { width: number; height: number; label: string
 export function FieldEditor({
   documentId,
   initialFields,
+  editingError = null,
+  sent = false,
 }: {
   documentId: string;
   initialFields: EditorField[];
+  editingError?: string | null;
+  sent?: boolean;
 }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState(JSON.stringify(initialFields));
   const [numPages, setNumPages] = useState(0);
   const [pageWidths, setPageWidths] = useState<Record<number, number>>({});
   const [tool, setTool] = useState<FieldType>("text");
@@ -45,10 +53,25 @@ export function FieldEditor({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
 
+  const dirty = JSON.stringify(fields) !== baseline;
+  useEffect(() => {
+    if (!dirty) return;
+    const unload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    const navigate = (e: MouseEvent) => {
+      if ((e.target as Element).closest("a[href]") && !window.confirm("Discard unsaved field changes?")) {
+        e.preventDefault(); e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", unload);
+    document.addEventListener("click", navigate, true);
+    return () => { window.removeEventListener("beforeunload", unload); document.removeEventListener("click", navigate, true); };
+  }, [dirty]);
+
   const fileSrc = `/api/documents/${documentId}/pdf`;
 
   const onPageClick = useCallback(
     (page: number, e: React.MouseEvent<HTMLDivElement>) => {
+      if (editingError || saving) return;
       const target = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - target.left;
       const y = e.clientY - target.top;
@@ -63,15 +86,16 @@ export function FieldEditor({
         width: d.width,
         height: fieldHeight,
         label: d.label,
-        required: true,
+        required: tool === "signature",
       };
       setFields((f) => [...f, newField]);
     },
-    [tool, pageWidths],
+    [tool, pageWidths, editingError, saving],
   );
 
   function startDrag(e: React.PointerEvent, id: string) {
     e.stopPropagation();
+    if (editingError || saving) return;
     e.preventDefault();
     const f = fields.find((x) => x.id === id);
     if (!f) return;
@@ -99,32 +123,48 @@ export function FieldEditor({
   }
 
   function removeField(id: string) {
+    if (editingError || saving) return;
     setFields((f) => f.filter((x) => x.id !== id));
   }
 
   async function save() {
+    if (editingError) return;
     setSaving(true);
-    const res = await fetch(`/api/documents/${documentId}/fields`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- strip client-only id
-        fields: fields.map(({ id: _id, ...rest }) => rest),
-      }),
-    });
-    setSaving(false);
-    if (res.ok) setSavedAt(new Date().toLocaleTimeString());
+    setSavedAt(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/fields`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: fields.map((f) => ({ ...f, id: f.id.startsWith("tmp_") ? undefined : f.id })) }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Could not save fields");
+      const updated: EditorField[] = body.fields.map((f: EditorField) => ({
+        id: f.id, type: f.type, page: f.page, x: f.x, y: f.y, width: f.width,
+        height: f.height, label: f.label ?? undefined, required: f.required,
+      }));
+      setFields(updated);
+      setBaseline(JSON.stringify(updated));
+      setSavedAt(new Date().toLocaleTimeString());
+      router.refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not save fields");
+    } finally { setSaving(false); }
   }
 
   return (
     <div className="editor-grid">
       <aside className="editor-side">
+        {editingError && <p role="alert">{editingError}</p>}
+        {sent && <p>Signers who have not signed yet will see the updated fields</p>}
+        {error && <p role="alert">{error}</p>}
         <div className="side-card">
           <h3>Place a field</h3>
           <div className="tool-list">
             {(["text", "textarea", "checkbox", "signature", "date", "hetu"] as FieldType[]).map((t) => (
               <button
                 key={t}
+                disabled={!!editingError || saving}
                 onClick={() => setTool(t)}
                 className={`tool-btn ${tool === t ? "on" : ""}`}
               >
@@ -140,10 +180,17 @@ export function FieldEditor({
 
         <div className="side-card">
           <h3>{fields.length} field{fields.length === 1 ? "" : "s"} placed</h3>
-          <button onClick={save} disabled={saving} className="btn-primary big" style={{ marginTop: 8 }}>
+          <button onClick={save} disabled={saving || !!editingError} className="btn-primary big" style={{ marginTop: 8 }}>
             {saving ? "Saving..." : "Save fields"} <span className="arr">→</span>
           </button>
-          {savedAt && <p className="side-confirm" style={{ marginTop: 8 }}>Saved at {savedAt}</p>}
+          {fields.map((f) => <div key={f.id} style={{ marginTop: 8 }}>
+            <span>{f.label || f.type}: </span>
+            {f.type === "signature" ? <small>Always required</small> : <label>
+              <input type="checkbox" checked={f.required} disabled={!!editingError || saving}
+                onChange={(e) => setFields((rows) => rows.map((row) => row.id === f.id ? { ...row, required: e.target.checked } : row))} /> Required
+            </label>}
+          </div>)}
+          {savedAt && !dirty && <p className="side-confirm" style={{ marginTop: 8 }}>Saved at {savedAt}</p>}
         </div>
       </aside>
 

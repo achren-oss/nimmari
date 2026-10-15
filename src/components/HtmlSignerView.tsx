@@ -304,7 +304,7 @@ export function HtmlSignerView({
       el.style.outlineOffset = "";
     });
     const missing: { label: string; el: HTMLElement }[] = [];
-    r.querySelectorAll<HTMLElement>("[data-pm-required]").forEach((el) => {
+    r.querySelectorAll<HTMLElement>("[data-pm-field]").forEach((el) => {
       const name = el.getAttribute("data-pm-field");
       if (!name) return;
       const label = el.getAttribute("data-pm-label") ?? name;
@@ -312,7 +312,8 @@ export function HtmlSignerView({
       const type = el.getAttribute("type")?.toLowerCase();
       const isSig =
         el.classList.contains("pm-signature") ||
-        el.getAttribute("data-pm-type") === "signature";
+        el.getAttribute("data-pm-type") === "signature" || tag === "div" || tag === "span";
+      if (!isSig && (!el.hasAttribute("data-pm-required") || (el as HTMLInputElement).disabled)) return;
       let isMissing = false;
       if (isSig) isMissing = !rescued;
       else if (tag === "input" && type === "checkbox") isMissing = !(el as HTMLInputElement).checked;

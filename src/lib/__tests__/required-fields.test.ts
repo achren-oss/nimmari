@@ -22,3 +22,15 @@ describe("required fields", () => {
     expect(shortFieldLabel("Allekirjoitus")).toBe("Allekirjoitus");
   });
 });
+
+it("requires signatures even when the stored flag is false", () => {
+  expect(missingRequiredFields([{ id: "sig", type: "signature", required: false }], {}, false)).toHaveLength(1);
+});
+
+import { FieldSchema } from "../field-schema";
+it.each(["text", "textarea", "checkbox", "date", "hetu", "signature"])("defaults required by type for %s", (type) => {
+  const input = { type, page: 0, x: 0, y: 0, width: 20, height: 20 };
+  expect(FieldSchema.parse(input).required).toBe(type === "signature");
+  expect(FieldSchema.parse({ ...input, required: true }).required).toBe(true);
+  expect(FieldSchema.parse({ ...input, required: false }).required).toBe(false);
+});

@@ -118,7 +118,7 @@ conversions and layout. **Assign imported signature boxes to signers and add mis
 - Round to integers for the fields API; width and height must each be at least 10.
 - Verify rotation/crop transformations visually instead of trusting raw rects blindly.
 - Put fields with `PUT /api/documents/{id}/fields` and `{"fields": [...]}`.
-- Remember that this replaces **all** fields and generates fresh IDs.
+- Without IDs this replaces **all** fields and generates fresh IDs; include existing IDs to preserve metadata.
 - Fetch `GET /api/documents/{id}` after configuring fields.
 - Use `text`, `textarea`, `checkbox`, `date`, `hetu`, or `signature` for PDF fields.
 - Keep single-line boxes about **22–30 overlay pixels high** for readable text.
@@ -160,7 +160,7 @@ python3 scripts/nimmari_flow.py --send-only DOC_ID --signers signers.json
 ```
 
 Use `--print-urls` only to capture links privately for delivery or a disposable test;
-URLs are omitted by default. Sending locks fields/prefill. The legacy create-and-send
+URLs are omitted by default. Sending locks prefill; fields remain editable until any signer signs. The legacy create-and-send
 mode remains available but does not provide a pause for visual draft verification.
 Both modes use upload/send `notify:false`; send-only preserves the existing upload's
 notification setting. No helper retries mutations automatically.
@@ -285,3 +285,10 @@ the Drizzle journal and runs once. This adds no public account-disable endpoint.
 Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.
 
 For fresh hosted setup, follow [INSTALL-FOR-AGENTS.md](../../../INSTALL-FOR-AGENTS.md): generate a one-time setup code, use Deploy to Render, then claim /api/setup/claim. Existing root/API-key provisioning remains supported.
+
+
+### Field requirements and editing
+
+Only signature fields are required by default. Other field types (text, textarea, date, hetu, checkbox) are optional unless `required:true` is supplied. A visible signature field always requires a signature, even with `required:false`. HTML non-signature fields remain opt-in via `data-pm-required`. Existing stored flags are unchanged.
+
+Field PUT accepts optional existing field `id` values to update in place, preserving omitted metadata and stored flags. Fields omitted from the list are deleted; fields without IDs are inserted with generated names when needed. A request without IDs retains replace-all behavior. Drafts and sent documents with no signatures may be edited; signed, completed, cancelled or declined documents return 409. Pending signers see saved fields on their next load; no emails are sent.

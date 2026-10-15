@@ -116,7 +116,7 @@ export function SignerView({
     if (draft) {
       // Restore client-only localStorage state after hydration.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setValues({ ...(initialValues ?? {}), ...draft.values });
+      setValues({ ...(initialValues ?? {}), ...Object.fromEntries(Object.entries(draft.values).filter(([id]) => fields.some((f) => f.id === id && !f.readOnly && !f.prefilled))) });
       if (draft.signaturePng && !signaturePng) setSignaturePng(draft.signaturePng);
       setRestored(draft.savedAt);
       setSavedAt(draft.savedAt);
@@ -331,7 +331,7 @@ function FieldOverlay({
   pageSize?: { width: number; height: number };
 }) {
   const [imageSize, setImageSize] = useState<{ src: string; ratio: number } | null>(null);
-  const isRequired = field.required && !readOnly;
+  const isRequired = (field.required || field.type === "signature") && !readOnly;
   const shortLabel = shortFieldLabel(field.label);
   const placeholder = shortLabel ? `${shortLabel}${isRequired ? " *" : ""}` : isRequired ? "*" : "";
   const missingRing = missing ? " ring-2 ring-red-500 border-red-500 bg-red-50" : "";

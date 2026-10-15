@@ -3,7 +3,7 @@
 Follow [the agent runbook](../INSTALL-FOR-AGENTS.md) for the default **Agent deploy
 with Render + Turso API keys**. Supply both provider keys plus your login email/name
 in one exchange; the agent creates a Turso database and free Render image service,
-waits for health, then uses the 1.3.0 one-time setup claim to create the first account
+waits for health, then uses the 1.3.1 one-time setup claim to create the first account
 and separate admin/regular keys. No root `NIMMARI_API_KEY` is stored on the server.
 The create request uses the pinned image, Frankfurt, free plan, `/api/health`, and
 only DATABASE_URL, DATABASE_AUTH_TOKEN, BETTER_AUTH_SECRET and NIMMARI_SETUP_CODE.
@@ -22,7 +22,7 @@ first account email/name. The agent claims the account and stores separate admin
 regular keys. No fork, build, registry login, or provider API keys are needed.
 See alternative B in the runbook for commands and shared verification.
 
-The Blueprint uses ghcr.io/achren-oss/nimmari:1.3.0, Frankfurt, free plan, one instance,
+The Blueprint uses ghcr.io/achren-oss/nimmari:1.3.1, Frankfurt, free plan, one instance,
 and /api/health. BETTER_AUTH_SECRET is generated. RENDER_EXTERNAL_URL supplies public
 and auth URL defaults. Existing APP_URL, BETTER_AUTH_URL, root keys and NIMMARI_*/PUUMERKKI_*
 aliases remain supported; explicit URLs take precedence.

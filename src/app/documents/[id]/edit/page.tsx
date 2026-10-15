@@ -1,7 +1,8 @@
+import { fieldEditingError } from "@/lib/field-editing";
 import Link from "next/link";
 import { eq, asc } from "drizzle-orm";
 import { db } from "@/db";
-import { document, field } from "@/db/schema";
+import { document, field, signingSession } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { notFound, redirect } from "next/navigation";
 import type { EditorField } from "@/components/FieldEditor";
@@ -20,6 +21,9 @@ export default async function EditDocumentPage({
   if (doc.kind === "html") {
     redirect(`/documents/${id}`);
   }
+
+  const sessions = await db.select().from(signingSession).where(eq(signingSession.documentId, id));
+  const editingError = fieldEditingError(doc.status, sessions.some((s) => s.signedAt !== null));
 
   const rows = await db
     .select()
@@ -50,7 +54,7 @@ export default async function EditDocumentPage({
           Done editing
         </Link>
       </header>
-      <FieldEditor documentId={id} initialFields={initialFields} />
+      <FieldEditor documentId={id} initialFields={initialFields} editingError={editingError} sent={doc.status === "sent"} />
     </main>
   );
 }

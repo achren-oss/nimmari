@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
 # ---- deps: install all dependencies (dev deps needed for the build) ----
-FROM node:22-bookworm-slim AS deps
+FROM node:25-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # ---- build: compile the Next.js standalone server ----
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
@@ -15,12 +15,12 @@ COPY . .
 RUN npm run build
 
 # ---- migrator: tiny standalone install used to apply SQL migrations at boot ----
-FROM node:22-bookworm-slim AS migrator
+FROM node:25-bookworm-slim AS migrator
 WORKDIR /migrator
 RUN npm init -y >/dev/null && npm install --omit=dev --no-audit --no-fund drizzle-orm@0.45.2 @libsql/client@0.17.3
 
 # ---- runtime: Node + Chromium, non-root ----
-FROM node:22-bookworm-slim AS runtime
+FROM node:25-bookworm-slim AS runtime
 RUN apt-get update \
  && apt-get install -y --no-install-recommends chromium fonts-dejavu-core fonts-liberation ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*

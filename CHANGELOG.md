@@ -6,7 +6,11 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 - Make free hosted Render + Turso the default agent installation, using HTTP APIs and the pinned 1.2.0 image; retain explicit local Docker setup and silent synthetic verification.
 
-## [1.2.0] - 2026-10-15
+### Fixed
+
+- Retry Chromium profile directory cleanup after disconnect and catch cleanup errors to prevent unhandled rejections while Chromium exits.
+
+## [1.2.0] - 2026-10-14
 
 - Rename the app, repository, and Docker image to Nimmari (formerly Puumerkki).
 - Introduce `NIMMARI_*` configuration with deprecated `PUUMERKKI_*` fallback aliases.

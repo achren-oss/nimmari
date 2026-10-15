@@ -6,6 +6,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Docs
 
+- Record the 15 October 2026 real Render + Turso end-to-end run, signing and cold-start timings, successful verification and teardown; clarify deployment and wake-up expectations.
 - Restore agent deployment with Render + Turso API keys as the default, with one-message credential instructions and one-time setup claim instead of a hosted root key. Keep the Deploy button as the no-provider-keys alternative and preserve explicit local setup.
 
 ## [1.3.0] - 2026-10-15

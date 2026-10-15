@@ -14,16 +14,17 @@ For users who don't want to give an agent provider keys, use alternative B below
 >
 > **Turso Platform API token** (free account; GitHub, Google or email):
 > 1. Sign in at https://app.turso.tech.
-> 2. Click your avatar/initials top-right → **Platform API Tokens**.
-> 3. Create a token (any name, e.g. `nimmari-agent`; if asked, restrict it to your
-> organization) and copy it: it is shown only once. This is a **Platform API token**,
+> 2. Open your organization's **Settings → API Tokens** (in some dashboard versions:
+> avatar/initials top-right → **Platform API Tokens**).
+> 3. Create a token (any name, e.g. `nimmari-agent`), scoped to your organization if
+> offered, and copy it: it is shown only once. This is a **Platform API token**,
 > not a database token. CLI alternative: `turso auth api-tokens mint nimmari-agent --org <your-org>`.
 >
 > **Render API key** (free account; GitHub, GitLab, Google, Bitbucket or email):
 > 1. Open https://dashboard.render.com and sign in.
 > 2. Click your avatar top-right → **Account Settings**.
 > 3. In **API Keys**, click **Create API Key**, name it e.g. `nimmari-agent`, and copy
-> it: it is shown only once.
+> it: it is shown only once. Render keys start with `rnd_`.
 >
 > Also provide your **email and name** for the Nimmari login. Hand keys through the
 > agent's secret manager or env vars `TURSO_API_TOKEN` and `RENDER_API_KEY` where
@@ -31,13 +32,14 @@ For users who don't want to give an agent provider keys, use alternative B below
 > Both keys can be revoked afterwards in the same place. I recommend revoking them
 > after installation if you won't need agent administration later.
 
-Sources: [Render API](https://render.com/docs/api) (keys are managed from Account
-Settings), [Turso authentication](https://docs.turso.tech/api-reference/authentication),
-[CLI token minting](https://docs.turso.tech/cli/auth/api-tokens/mint).
-Dashboard menu labels checked on 15 October 2026 from provider docs/third-party guides
-([Render tutorial](https://render.com/tutorials/firstdeploy/install-skills-and-optional-mcp),
-[Turso setup guide](https://reachssh.com/sync/setup/));
-if labels differ, look for “API Keys”/“API Tokens” in account settings.
+Sources: [Turso authentication](https://docs.turso.tech/api-reference/authentication)
+(official; describes the dashboard's organization-level token table),
+[Windmill Turso guide](https://hub.windmill.dev/resource_types/172/turso) (third-party),
+and [ReachSSH setup guide](https://reachssh.com/sync/setup/) (third-party).
+Render: [API documentation](https://render.com/docs/api) and
+[official tutorial](https://render.com/tutorials/firstdeploy/install-skills-and-optional-mcp)
+(Account Settings → API Keys → Create API Key; keys start with `rnd_`).
+Dashboard menu labels may vary by version.
 
 Wait for these inputs; never invent the email or name. Never paste tokens into commands
 or transcripts, echo them, enable tracing, or dump secrets. Capture private pasted keys
@@ -149,7 +151,7 @@ Official schemas: [create database](https://docs.turso.tech/api-reference/databa
 ```bash
 set +x
 {
-  printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 24)"
+  printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
   printf 'NIMMARI_SETUP_CODE=%s\n' "$(openssl rand -hex 24)"
 } >> "$SERVER_ENV"
 chmod 600 "$SERVER_ENV"

@@ -4,7 +4,7 @@ This is the primary, recommended way to run Nimmari: Render runs the Docker imag
 (Chromium included for HTML-form rendering) and Turso hosts the database. Both have
 free tiers, which are enough for personal use and evaluation.
 
-> Free-tier facts below were checked on **15 October 2026** against the providers'
+> Free-tier facts below were checked on **14 October 2026** against the providers'
 > official pages. Providers change their terms; re-check the linked pages.
 
 ## What the free tiers mean for Nimmari

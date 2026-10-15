@@ -2,9 +2,9 @@
 
 The **default is a free hosted Render web service + Turso libSQL database**, installed by the agent through HTTP APIs. Do not ask where to install. Run the Bash blocks in order in the same shell. No Render or Turso CLI, repository fork, local Docker, or paid plan is required. Pin the prebuilt image to `ghcr.io/achren-oss/nimmari:1.2.0`. See [AGENTS.md](AGENTS.md) for real-document rules; never fill or sign for a person.
 
-## Free hosting facts (checked 15 October 2026)
+## Free hosting facts (checked 14 October 2026)
 
-[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about one minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium.
+[Render Free](https://render.com/docs/free) provides 0.1 CPU / 512 MB RAM, 750 free instance hours per workspace per month, and needs no card. It sleeps after 15 minutes without traffic; waking takes about one minute. Its filesystem is ephemeral, so **use Turso, never local SQLite on Render**. Chromium HTML-form rendering works but is slow: about 10 seconds per HTML signing in our [measured benchmark](docs/benchmarks/render-free-2026-10-07.md). PDF uploads use pdf-lib and do not need Chromium. In a local container limited to 512 MB RAM and 0.1 CPU (`docker --memory 512m --cpus 0.1`), an HTML-form signing including Chromium rendering completed in about 18 s with about 116 MiB memory in use afterwards (measured 14 October 2026).
 
 [Turso Free](https://turso.tech/pricing) is $0, needs no card, and includes 100 databases, 5 GB storage, 500M rows read and 10M rows written per month. Signed PDFs live in the database. Stay within the free quotas; never enable paid resources automatically.
 

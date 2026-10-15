@@ -73,7 +73,11 @@ async function launchBrowser(): Promise<Browser> {
     XDG_CACHE_HOME: userDataDir,
   };
   const browser = await puppeteer.launch({ executablePath, headless: true, args, userDataDir, env });
-  browser.once("disconnected", () => void rm(userDataDir, { recursive: true, force: true }));
+  browser.once("disconnected", () => {
+    // Chromium can still be writing profile files while its processes exit.
+    void rm(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+      .catch(() => { /* Temp directory cleanup is best effort. */ });
+  });
   return browser;
 }
 

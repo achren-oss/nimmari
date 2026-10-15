@@ -129,7 +129,7 @@ export function HtmlSignerView({
       const slot = target.closest(".pm-signature");
       if (!slot) return;
       e.preventDefault();
-      const sidecard = document.getElementById("puumerkki-signature-card");
+      const sidecard = document.getElementById("nimmari-signature-card");
       sidecard?.scrollIntoView({ behavior: "smooth", block: "center" });
     };
     shadow.addEventListener("click", onShadowClick);
@@ -368,7 +368,7 @@ export function HtmlSignerView({
         </div>
 
         <aside className="signer-side">
-          <div id="puumerkki-signature-card" style={{ scrollMarginTop: 16 }}>
+          <div id="nimmari-signature-card" style={{ scrollMarginTop: 16 }}>
             <SignatureSidebar
               ref={sidebarRef}
               savedSignature={savedSignature}

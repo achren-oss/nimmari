@@ -7,7 +7,7 @@ import * as schema from "@/db/schema";
 
 const local = vi.hoisted(() => ({ db: undefined as unknown, client: undefined as unknown }));
 vi.mock("@/db", () => ({ get db() { return local.db; }, get client() { return local.client; } }));
-const directory = await mkdtemp("/tmp/puumerkki-rate-limit-");
+const directory = await mkdtemp("/tmp/nimmari-rate-limit-");
 const url = `file:${directory}/test.db`;
 const client = createClient({ url });
 const secondClient = createClient({ url });

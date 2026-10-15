@@ -1,8 +1,9 @@
+import { nimmariEnv } from "@/lib/env";
 const DEFAULT_TZ = "Europe/Helsinki";
 
 /** Deployment default; overridden per document when `auditTimezone` is set. */
 export function defaultAuditTimezone(): string {
-  return process.env.PUUMERKKI_AUDIT_TIMEZONE?.trim() || DEFAULT_TZ;
+  return nimmariEnv("AUDIT_TIMEZONE")?.trim() || DEFAULT_TZ;
 }
 
 export function resolveAuditTimezone(documentTimezone: string | null | undefined): string {

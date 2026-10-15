@@ -86,7 +86,7 @@ export default async function DashboardPage({
   return (
     <main className="page-shell">
       <header className="app-top">
-        <div className="wm">Puumerkki<span className="amp">.</span></div>
+        <div className="wm">Nimmari<span className="amp">.</span></div>
         <div className="tagline">— your desk, this morning.</div>
         <div className="ornament">· · ·</div>
       </header>

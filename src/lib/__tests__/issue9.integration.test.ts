@@ -118,7 +118,7 @@ describe("webhook security", () => {
   it("blocks internal URLs", () => {
     expect(isSafeWebhookUrl("http://127.0.0.1/hook")).toBe(false);
     expect(isSafeWebhookUrl("http://169.254.169.254/")).toBe(false);
-    expect(isSafeWebhookUrl("https://hooks.example.com/puumerkki")).toBe(true);
+    expect(isSafeWebhookUrl("https://hooks.example.com/nimmari")).toBe(true);
   });
 
   it("signs payload with HMAC", () => {

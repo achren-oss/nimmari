@@ -105,7 +105,7 @@ export async function POST(
       const emailResult = await sendSigningEmail({
         to: signer.email,
         recipientName: signer.name,
-        senderName: parsed.data.senderName ?? owner?.name ?? "Puumerkki",
+        senderName: parsed.data.senderName ?? owner?.name ?? "Nimmari",
         documentTitle: doc.title,
         url,
         signingSessionId: sessionId,

@@ -1,3 +1,4 @@
+import { nimmariEnv } from "@/lib/env";
 import { bearerFailureRateLimit } from "@/lib/rate-limit";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
@@ -29,7 +30,7 @@ export async function getApiIdentity(req: Request, options: { allowOwnerlessRoot
     if (!match) return bearerFailure(req);
     const key = match[1];
     if (matchesRootKey(key)) {
-      const userId = process.env.PUUMERKKI_API_OWNER_ID || "";
+      const userId = nimmariEnv("API_OWNER_ID") || "";
       return userId || options.allowOwnerlessRoot ? { userId, scope: "admin", via: "root" } : bearerFailure(req);
     }
     const row = await db.query.apiKey.findFirst({ where: and(eq(apiKey.keyHash, hashApiKey(key)), isNull(apiKey.revokedAt)) });

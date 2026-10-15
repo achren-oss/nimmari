@@ -1,3 +1,4 @@
+import { nimmariEnv } from "@/lib/env";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { account, apiKey, document, session, user } from "@/db/schema";
@@ -12,7 +13,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   return db.transaction(async (tx) => {
     const owner = await tx.query.user.findFirst({ where: eq(user.id, id) });
     if (!owner) return Response.json({ error: "Account not found" }, { status: 404 });
-    if (id === process.env.PUUMERKKI_API_OWNER_ID || id === caller.identity.userId) {
+    if (id === nimmariEnv("API_OWNER_ID") || id === caller.identity.userId) {
       return Response.json({ error: "Cannot delete the configured API owner or your own account" }, { status: 409 });
     }
     if (await tx.query.document.findFirst({ where: eq(document.ownerId, id) })) {

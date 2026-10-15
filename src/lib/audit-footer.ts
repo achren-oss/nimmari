@@ -16,7 +16,7 @@ export function formatAuditTimestamp(d: Date, timeZone?: string | null): string 
   return formatAuditTimestampInZone(d, timeZone ?? "");
 }
 
-/** Remove any existing Puumerkki audit section from signed HTML. */
+/** Remove any existing Nimmari audit section from signed HTML. */
 export function stripHtmlAuditFooter(html: string): string {
   return html.replace(
     /<style>[\s\S]*?\.pm-audit[\s\S]*?<\/style>\s*<section class="pm-audit"[\s\S]*?<\/section>/i,

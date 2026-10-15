@@ -13,10 +13,10 @@ describe("API key secrets", () => {
     expect(generateApiKey().key).not.toBe(a.key);
   });
   it("reads the OSS root environment key and rejects other secrets", () => {
-    vi.stubEnv("PUUMERKKI_API_KEY", "synthetic-root-secret");
+    vi.stubEnv("NIMMARI_API_KEY", "synthetic-root-secret");
     expect(matchesRootKey("synthetic-root-secret")).toBe(true);
     expect(matchesRootKey("wrong")).toBe(false);
-    vi.stubEnv("PUUMERKKI_API_KEY", "");
+    vi.stubEnv("NIMMARI_API_KEY", "");
     expect(matchesRootKey("synthetic-root-secret")).toBe(false);
     expect(matchesRootKey("")).toBe(false);
   });

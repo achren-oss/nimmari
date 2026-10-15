@@ -64,7 +64,7 @@ async function launchBrowser(): Promise<Browser> {
   // Some hosts (e.g. Render) give Chromium no usable HOME/config dir, so the
   // crashpad handler aborts with "--database is required". Disable crash
   // reporting and point profile/config dirs at a fresh temp directory.
-  const userDataDir = await mkdtemp(join(tmpdir(), "puumerkki-chrome-"));
+  const userDataDir = await mkdtemp(join(tmpdir(), "nimmari-chrome-"));
   args.push("--disable-crash-reporter", "--disable-breakpad", "--no-first-run", "--disable-gpu");
   const env = {
     ...process.env,

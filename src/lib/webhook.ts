@@ -103,7 +103,7 @@ export async function sendWebhook(
   const payloadStr = JSON.stringify(payload);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "User-Agent": "Puumerkki-Webhook/1.0",
+    "User-Agent": "Nimmari-Webhook/1.0",
   };
 
   // Add HMAC signature if secret is provided

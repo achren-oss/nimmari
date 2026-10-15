@@ -47,7 +47,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/achren-oss/nimmari
             org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.vendor=Big Blue Games Oy
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: true

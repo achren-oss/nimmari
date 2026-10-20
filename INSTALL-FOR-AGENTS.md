@@ -1,5 +1,7 @@
 # Install Nimmari: runbook for AI agents
 
+Nimmari is agent-first: after setup, the human hands over a document, PDF, HTML form, or photo and signs. The agent prepares and prefills authorized known values, confirms signer slots, delivers links in chat, tracks completion, and fetches the signed PDF. Only signatures are mandatory by default; unknown values remain for the signer. Continue with the [end-to-end document workflow](README.md#agent-workflow-from-material-to-signed-pdf) and [portable skill](skills/nimmari/SKILL.md) after installation. Owner login is optional.
+
 ## A. Default: Agent deploy with Render + Turso API keys
 
 Use the prebuilt 1.3.1 image, then bootstrap through its one-time setup claim.
@@ -463,6 +465,10 @@ instances. sync:false values are prompted only on initial creation.
 [RENDER_EXTERNAL_URL](https://render.com/docs/environment-variables) supplies the service
 URL automatically, so APP_URL and BETTER_AUTH_URL are unnecessary for this flow.
 
+## Agent maintenance after installation
+
+Keep the deployment IDs and regular/admin key files privately so the agent can resume work. For updates, back up the database and test restoration, review the target release's migration requirements, update the pinned container image through the provider's service configuration, deploy, and verify `/api/health` and the regular key. Docker applies migrations at startup; native/Vercel deployments must run `scripts/migrate.mjs` against the intended database before deployment. Use synthetic signing checks only with deliberate test authorization. Provider credentials are needed again if revoked; Nimmari's document API does not configure hosting, server environment variables, or upgrades. Preserve the database and secrets when replacing containers. Return to the [agent document workflow](README.md#agent-workflow-from-material-to-signed-pdf) for real documents; no owner login is needed for routine API work.
+
 ## B. Alternative: No keys for the agent: Deploy to Render button
 
 For users who don't want to give an agent provider keys. This is an independent path:
@@ -611,7 +617,7 @@ path.chmod(0o600)
 PY
 ```
 
-Omitting `password` asks the server to generate it. Securely read `account-once.json` using a private, non-logged file viewer. Show its `password` to the user **once in a private channel**, with the login URL (`PUBLIC_URL/login`) and email. Tell them to store it in their password manager and change it through their account's supported password flow. Do not print the response to a shared terminal, transcript or final report. If no private delivery channel is available, have the user read the file locally; do not disclose it in public chat. Keep the file until password handoff and key provisioning succeed, then remove it.
+Omitting `password` asks the server to generate it. Securely read `account-once.json` using a private, non-logged file viewer. Show its `password` to the user **once in a private channel**, with the login URL (`PUBLIC_URL/login`) and email. Tell them to store it in their password manager; existing-account password changes use Better Auth's authenticated password flow, not a Nimmari admin password-reset endpoint. Do not print the response to a shared terminal, transcript or final report. If no private delivery channel is available, have the user read the file locally; do not disclose it in public chat. Keep the file until password handoff and key provisioning succeed, then remove it.
 
 On an HTTP error, stop and inspect state before retrying: a timeout may occur after an account was created. A 409 means the email already exists; do not choose another person's address or silently replace credentials.
 

@@ -1,5 +1,7 @@
 # Deploy Nimmari on Vercel + Turso (alternative)
 
+The default fresh installation is [agent deployment on Render + Turso](../INSTALL-FOR-AGENTS.md). Use this secondary Vercel path when specifically chosen; an agent can perform provider configuration through authorized provider tooling, while dashboard instructions remain a manual alternative.
+
 Vercel runs Nimmari as serverless functions. HTML forms are rendered with
 `@sparticuz/chromium-min`, which downloads a pinned Chromium build at cold start.
 
@@ -22,9 +24,9 @@ Vercel runs Nimmari as serverless functions. HTML forms are rendered with
 **Turso free plan** ([turso.tech/pricing](https://turso.tech/pricing)): 100 databases,
 5 GB storage, 500 million rows read / 10 million rows written per month.
 
-## Steps
+## Alternative deployment steps
 
-1. **Create the Turso database** (see [deploy-render.md](deploy-render.md#steps), step 1).
+1. **Create the Turso database** through the Turso Platform API as described in [agent runbook step 2](../INSTALL-FOR-AGENTS.md#2-create-the-turso-database-through-the-platform-api), including creating its database token. Keep credentials private.
 2. **Apply the schema** from your machine, once (and after upgrades):
    ```bash
    DATABASE_URL=libsql://... DATABASE_AUTH_TOKEN=... node scripts/migrate.mjs
@@ -36,7 +38,9 @@ Vercel runs Nimmari as serverless functions. HTML forms are rendered with
    (your production URL), optional `RESEND_*` and `NIMMARI_API_*`.
    If the URL is not known yet, leave `BETTER_AUTH_URL` and `APP_URL` unset for the first deploy.
    Do not set `PUPPETEER_EXECUTABLE_PATH` on Vercel.
-5. **Deploy to obtain the URL.** The first deploy gives you a `https://<project>.vercel.app` URL. Set both `BETTER_AUTH_URL` and `APP_URL` to that public origin in the Production environment, then **redeploy** so the app uses them. Signing links are built from `APP_URL`; configure it before sending any documents. After redeploying, open `/api/health` (expects `{"status":"ok"}`) and provision an account through the admin API before opening `/login`.
+5. **Deploy to obtain the URL.** The first deploy gives you a `https://<project>.vercel.app` URL. Set both `BETTER_AUTH_URL` and `APP_URL` to that public origin in the Production environment, then **redeploy** so the app uses them. Signing links are built from `APP_URL`; configure it before sending any documents. After redeploying, open `/api/health` (expects `{"status":"ok"}`) and complete account/key provisioning below. Owner `/login` is optional.
 6. **Custom domain:** add it under *Settings → Domains* and update `BETTER_AUTH_URL`/`APP_URL`, then redeploy.
 
-Public signup is disabled. Configure the root `NIMMARI_API_KEY` and follow [API key setup](../README.md#create-an-api-key-for-an-ai-agent) to provision accounts and regular agent keys. Apply journaled migrations with `scripts/migrate.mjs` before each deployment.
+Public signup is disabled. For a fresh empty instance, set a strong `NIMMARI_SETUP_CODE` (at least 32 characters) before deploying, then follow [setup claim and skill installation](../INSTALL-FOR-AGENTS.md#6-claim-the-first-account-and-protect-credentials); use the Vercel public URL and continue with the shared verification/silent smoke-test steps. No server root key is needed. Alternatively, for existing/root-managed instances configure the root `NIMMARI_API_KEY` and follow [API key setup](../README.md#create-an-api-key-for-an-ai-agent) to provision accounts and regular agent keys. Apply journaled migrations with `scripts/migrate.mjs` before each deployment.
+
+After installation, follow the [agent document workflow](../README.md#agent-workflow-from-material-to-signed-pdf) for photo/PDF/HTML preparation, authorized known-value prefill, chat links with `notify:false`, tracking/webhooks, and final signed PDF retrieval. Only signature fields are mandatory by default.

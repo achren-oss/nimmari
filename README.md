@@ -1,5 +1,7 @@
 # Nimmari
 
+**Agent-first, self-host-only e-signatures.** Hand your agent a document, PDF, HTML form, or photo of a paper form, then sign. Your agent installs and configures Nimmari, prepares and prefills the document, confirms signer roles, delivers links in chat, tracks signing, and retrieves the signed PDF. Signers fill only what the agent cannot know, such as a personal ID (`hetu`); only signature fields are mandatory by default. The owner web UI and manual installation are secondary alternatives.
+
 Website: https://nimmari.joakimachren.com
 
 **AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)** — default: agent deploy with Render + Turso API keys, then one-time setup claim (no server root key).
@@ -16,11 +18,24 @@ Website: https://nimmari.joakimachren.com
 
 > **Signatures:** Nimmari produces eIDAS *Simple* Electronic Signatures (SES) only, not AdES/QES. See [Legal disclaimer](#legal-disclaimer).
 
-Self-hosted headless e-signatures. Your documents never leave your server.
+Self-hosted e-signatures on infrastructure you control.
 
-Nimmari is Finnish for “autograph”. Upload a PDF or an HTML form, prepare its fields, and send a signing link. Run it on infrastructure you control, with a web UI and HTTP endpoints for integrations. Nimmari is self-host only; there is no hosted offering.
+Nimmari is Finnish for “autograph”. Agents use the HTTP API and [portable skill](skills/nimmari/SKILL.md) for document work. Humans hand over the material and sign through an account-free link. Nimmari is self-host only; there is no hosted offering.
 
 Documents are stored in your configured database. Optional Resend email sends signing links and completion notifications through an external provider; a remote libSQL database stores documents on that database host.
+
+## Agent workflow: from material to signed PDF
+
+Start with [agent installation](INSTALL-FOR-AGENTS.md): privately provide a Render API key and Turso Platform API token; the agent deploys, completes `POST /api/setup/claim`, and stores separate admin and regular document keys. No owner login or manual environment copying is needed on this default path. Use the regular key as `Authorization: Bearer <key>` for document requests.
+
+1. **Prepare the material.** The agent inspects a PDF or crops/straightens a photo and converts it to PDF locally. It can also build a self-contained HTML form from supplied content. Confirm who signs, how many signers there are, which line belongs to each, and which blanks to fill before placing fields; never infer roles or invent values.
+2. **Create the document.** `POST /api/documents` with multipart `pdf` (up to 4 MiB), or `POST /api/documents/html` with multipart `html` (up to 2 MiB for files). Set upload `notify="false"` for silent operation and optional `webhookUrl` for lifecycle events. Save the returned `id` privately; there is no document-list API.
+3. **Place and assign fields.** For PDFs, `PUT /api/documents/{id}/fields` with `{"fields":[...]}` using zero-based pages and top-left coordinates on an 800px-wide page. For HTML, use `data-pm-field` and signer attributes. Assign every multi-signer signature field to an `assignedSignerKey` matching a send-time `key`. Only signatures are required by default; add other requirements only when wanted.
+4. **Prefill and verify.** `GET /api/documents/{id}` returns fields; `PUT /api/documents/{id}/prefill` with `{"values":{"<field-id>":"known value"},"mode":"merge"}` fills PDF fields by ID (HTML by name). Prefill authorized known values, never signatures. Leave unknown values for the signer. Fetch again to check values and render every PDF page with field boxes at 800px width; inspect placement before sending. See the [skill](skills/nimmari/SKILL.md) for helpers and HTML preview guidance.
+5. **Send and deliver in chat.** `POST /api/documents/{id}/send` with `{"signers":[{"email":"signer@example.com","name":"Example Signer","key":"party"}],"notify":false}`. Verify `emailSent:false` for every slot; one signer returns `url`, multiple return `signers[].url`. Deliver each secret link only to its intended signer, with its expiry. Email delivery is optional, but a real signer email is still required as audit metadata. For sequential slots, the agent delivers later links when lower orders have signed; no email follow-up occurs with `notify:false`.
+6. **Track and retrieve.** Poll `GET /api/documents/{id}` until `completed`, or reconcile authenticated lifecycle webhooks with that GET. Stop on `cancelled` or `declined`. Download `GET /api/documents/{id}/pdf?signed=1` only after completion and validate the PDF; before completion it may be an intermediate artifact. The skill's `fetch_signed_pdf.py` polls and validates automatically. Webhooks are configured at upload, cover `document.completed`, `document.cancelled`, and `document.declined`, and make one best-effort delivery; verify raw-body HMAC with the server's `NIMMARI_WEBHOOK_SECRET` and retain polling as a fallback.
+
+No signing or signer submissions by the agent on a real person's behalf. Private fields are hidden from other signers during signing, but completed PDFs expose all values to all parties; explain this before using them. For schemas, helper commands, and recovery guidance, see the [API reference](skills/nimmari/reference/api-cheatsheet.md).
 
 ## Features
 
@@ -35,7 +50,9 @@ Documents are stored in your configured database. Optional Resend email sends si
 
 ## Quick start
 
-Use Node.js 20.19+ (or a newer supported Node version) and npm.
+**Secondary: local development or explicitly requested self-managed setup.** For a fresh hosted instance, use [the agent runbook](INSTALL-FOR-AGENTS.md). The agent can run the commands below on the intended host.
+
+Use Node.js 22.17+ in the 22.x line, or Node.js 24+ and npm, to satisfy the locked dependencies (the Docker image and CI use Node 22).
 
 ```sh
 npm ci
@@ -48,7 +65,7 @@ npm run dev
 
 **Shell environment variables override `.env.local`** in both Node.js and Next.js. Stale exported `DATABASE_URL` or `NIMMARI_API_KEY` values can silently direct migrations/dev to the wrong database or secret. Check your shell and unset stale values before starting (for example, `unset DATABASE_URL NIMMARI_API_KEY`).
 
-Provision an account through the admin API as described below, then log in at http://localhost:3000. The migration script reads `.env.local` and defaults to `file:./local.db`; set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` there for a remote database. Next.js also loads `.env.local` for the application. `npm run db:push` is development-only; use migrations for deployments.
+Provision an account and regular agent key through the admin API as described below. Owner login at http://localhost:3000 is optional. The migration script reads `.env.local` and defaults to `file:./local.db`; set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` there for a remote database. Next.js also loads `.env.local` for the application. `npm run db:push` is development-only; use migrations for deployments.
 
 Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABLE_PATH` to its executable. On Vercel, `@sparticuz/chromium-min` is used, with a pinned Chromium pack downloaded at runtime. PDF uploads use pdf-lib directly.
 
@@ -64,7 +81,7 @@ Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABL
      -d '{"email":"owner@example.com","name":"Document Owner"}'
    ```
 
-   Save the returned account `id` as `OWNER_ID` and the generated password securely. Log in at `/login` with that email and password.
+   Save the returned account `id` as `OWNER_ID` and the generated password securely. `/login` is available for optional manual document management.
 3. Create a regular agent key for that account:
 
    ```sh
@@ -83,7 +100,7 @@ Install Chrome/Chromium for HTML-form PDF rendering and set `PUPPETEER_EXECUTABL
 
    Expect health status `ok` and the owner's key metadata. Give integrations the regular key. Set `NIMMARI_API_OWNER_ID` to the account ID and restart only if root also needs document access.
 
-## Screenshots
+## Optional owner UI and signer view
 
 ![Login](docs/screenshots/login.png)
 ![Dashboard](docs/screenshots/dashboard.png)
@@ -121,9 +138,9 @@ See [.env.example](.env.example). Empty optional values disable the correspondin
 
 Public signup and implicit provider account creation are disabled. Existing accounts can log in with email/password; signers need no account. Administrators provision accounts through the API. Run `node --env-file=.env.local scripts/migrate.mjs` before deploying new code; Docker runs migrations at startup.
 
-Nimmari is self-host only. Pick one:
+Nimmari is self-host only. The default is [agent deployment with Render + Turso API keys and setup claim](INSTALL-FOR-AGENTS.md). Other deployment options remain available:
 
-- **Render + Turso (recommended):** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
+- **Render + Turso:** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
 - **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.3.1` (published from `v*` tags), or `docker build -t nimmari .`, then
   `docker run -p 3000:3000 -v nimmari-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host nimmari`.
@@ -132,6 +149,8 @@ Nimmari is self-host only. Pick one:
 Documents and signed outputs are stored in the database; back it up and test restores. You are the data controller for your instance.
 
 ## Create an API key for an AI agent
+
+Fresh hosted installs receive admin and regular keys through [setup claim](INSTALL-FOR-AGENTS.md#6-claim-the-first-account-and-protect-credentials). The root-key procedure below is an alternative for existing or explicitly requested self-managed installations.
 
 Configure a strong root secret as the server's `NIMMARI_API_KEY` (for example, generate one with `openssl rand -hex 32` in a private terminal). Restart the app after updating its secret configuration. Keep this key for administration.
 
@@ -186,11 +205,11 @@ Optional Poppler (`poppler-utils` on Debian/Ubuntu) provides the tools used by `
 
 Example first prompt:
 
-> Use the Nimmari skill to prepare this PDF for signing. Ask me who signs, how many signers there are, which line belongs to each person, and which blanks they should fill. Verify field placement before sending, then return the signing links privately in chat without emailing them. Do not fill or sign for anyone.
+> Use the Nimmari skill to prepare this PDF for signing. Confirm who signs, how many signers there are, which line belongs to each person, and which blanks to fill. Prefill my authorized known values; leave only signatures and unknown values for signers. Verify field placement before sending, then return the signing links privately in chat without emailing them. Do not submit signing fields or signatures for anyone.
 
 ## Current API
 
-AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which line before creating fields, one signing session per signer, never sign or fill on the user's behalf.
+AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which line before creating fields, one signing session per signer, never submit signing fields or signatures on the user's behalf. Owner draft prefill of authorized known values is supported.
 
 “Owner” below means an authenticated browser session or `Authorization: Bearer <NIMMARI_API_KEY>`, with document ownership enforced. Field placement and prefill accept either. An invalid bearer key is rejected on routes using service-account authentication.
 
@@ -252,7 +271,7 @@ Later PDF signers see accumulated values and signatures with other signers' priv
 Start from [the sample Consulting Agreement](scripts/fixtures/sample-form.html). Use unique field names:
 
 ```html
-<input data-pm-field="client_name" data-pm-label="Client name" data-pm-required>
+<input data-pm-field="client_name" data-pm-label="Client name">
 <textarea rows="5" data-pm-field="scope" data-pm-label="Scope of services"></textarea>
 <div class="pm-signature" data-pm-field="signature"
      data-pm-label="Client signature" data-pm-type="signature"

@@ -1,5 +1,7 @@
 # Nimmari open-source plan
 
+Planning context, not an installation or API contract. Start with the [agent installation runbook](../INSTALL-FOR-AGENTS.md) and [current agent workflow](../README.md#agent-workflow-from-material-to-signed-pdf). Items below describe dated decisions/proposals; PAdES and trusted timestamps are not implemented.
+
 ## Decisions (7.10.2026)
 - License: AGPL-3.0-only. Copyright: Big Blue Games Oy.
 - Repo: achren-oss/nimmari, clean history. Self-host only, no hosted service.

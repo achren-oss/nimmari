@@ -202,3 +202,11 @@ Errors: 404 disabled/missing/short code, 403 wrong code, 410 {error:"already_cla
 10-minute fixed window, 503 if the rate limiter cannot safely check.
 Claim, account, credential and key writes share one transaction; failures roll back.
 Apply journaled migration 0008_setup_claim.sql before deployment.
+
+## Reliable delivery (1.4)
+
+Use `GET /api/documents` to rediscover the authenticated owner's documents (`status`, `limit`, opaque `cursor`). Always attach a persisted `Idempotency-Key` to send; after timeout retry the same key and body within 24 hours. A different body with that key returns 422. Never repeat an unkeyed send to recover links.
+
+Recover an unsigned active slot using `POST /api/documents/{id}/signers/{slotKeyOrSessionId}/reissue`; the old link immediately stops working and the new one expires in 30 days. `POST /api/documents/{id}/resend` rotates/redelivers existing active slots without adding signers. Both accept `notify:false` for chat delivery and refuse signed/stopped/waiting slots. Share fresh links only with their intended signer.
+
+Webhooks now retry from a DB outbox. Inspect `/api/documents/{id}/webhooks` or `/api/webhooks/deliveries`; use the bearer-authenticated process endpoint for serverless cron and owner redeliver for manual retries. Poll document status as a fallback. Receivers deduplicate `X-Nimmari-Delivery-Id` and verify the unchanged raw-body HMAC header. Docker enables the optional `NIMMARI_WEBHOOK_WORKER` interval. Apply journaled migration 0009 before upgrading outside Docker (`npm run db:migrate`).

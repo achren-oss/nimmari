@@ -10,10 +10,10 @@
   <meta property="og:title" content="Nimmari — Your agent prepares. You sign.">
   <meta property="og:description" content="Agent-first e-signatures: your agent does the work, you hand over the document and sign. Open source and self-host only.">
   <meta property="og:url" content="https://nimmari.joakimachren.com/">
-  <meta property="og:image" content="https://nimmari.joakimachren.com/img/dashboard.png">
+  <meta property="og:image" content="https://nimmari.joakimachren.com/img/sign-hero.png">
   <meta property="og:image:width" content="1280">
-  <meta property="og:image:height" content="800">
-  <meta property="og:image:alt" content="Nimmari document dashboard">
+  <meta property="og:image:height" content="900">
+  <meta property="og:image:alt" content="Nimmari signing view with a synthetic service agreement">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -28,17 +28,18 @@
     <p>Only signature fields are mandatory by default. There is no hosted SaaS: your agent runs your instance on infrastructure you control.</p>
     <div class="actions"><a class="button" href="#install">Set up with your agent <span aria-hidden="true">↗</span></a><a href="https://github.com/achren-oss/nimmari/blob/main/README.md">Read the docs →</a></div>
     <p class="small">Nimmari is Finnish for “autograph”. Formerly Puumerkki.</p>
-    <figure class="lead-image"><img src="img/dashboard.png" width="1280" height="800" alt="Nimmari dashboard showing documents and their signing status"><figcaption>The optional owner dashboard; agents prepare and track documents through the API.</figcaption></figure>
+    <figure class="lead-image"><img src="img/sign-hero.png" width="1280" height="900" alt="Nimmari signing view showing a synthetic service agreement for Alex Example"><figcaption>A signing link opens directly to the document. Review, fill the remaining fields, and sign.</figcaption></figure>
   </section>
   <section id="how-it-works" class="wrap section">
     <p class="eyebrow">How it works</p><h2>Your agent does the work.<br>You hand over the document and sign.</h2>
     <ol>
       <li><strong>Install and configure.</strong> Give your agent Render and Turso provider keys privately. It deploys and completes <code>POST /api/setup/claim</code>, storing separate admin and document keys.</li>
-      <li><strong>Hand over the material.</strong> Your agent crops and straightens a photo into a PDF locally, inspects your PDF, or builds a self-contained HTML form. It confirms who signs, how many signers there are, which line belongs to each, and which blanks to fill.</li>
+      <li><strong>Hand over the material.</strong> Your agent crops and straightens a photo into a PDF locally, inspects your PDF, or builds a self-contained HTML form. It can list existing documents, then confirms who signs, how many signers there are, which line belongs to each, and which blanks to fill.</li>
       <li><strong>Prepare and prefill.</strong> It uploads via <code>POST /api/documents</code> (PDF) or <code>POST /api/documents/html</code>. PDF fields use <code>PUT /api/documents/{id}/fields</code>; HTML fields use <code>data-pm-field</code>. It assigns signer keys, fetches fields with <code>GET /api/documents/{id}</code>, prefills authorized known values with <code>PUT /api/documents/{id}/prefill</code>, and checks placement visually. Signatures stay yours.</li>
       <li><strong>Get your link in chat.</strong> Your agent sends confirmed signer slots with <code>POST /api/documents/{id}/send</code> and <code>notify:false</code>, verifies <code>emailSent:false</code>, and privately delivers each returned URL to its intended signer. Upload multipart <code>notify="false"</code> also suppresses completion emails. No email delivery or signer account is needed; signer email is still required for the audit trail. Links expire after 30 days.</li>
       <li><strong>Sign, then collect.</strong> You open your link, fill remaining unknown fields, and sign. Your agent polls <code>GET /api/documents/{id}</code> or reconciles lifecycle webhooks set by upload <code>webhookUrl</code>. After <code>completed</code>, it downloads and validates <code>GET /api/documents/{id}/pdf?signed=1</code>. It stops on cancellation or decline.</li>
     </ol>
+    <p>Reliable delivery is built in: agents send with an idempotency key, reissue lost signing links, and inspect webhook retries and history.</p>
     <p>For sequential signing without email, your agent delivers later links when earlier slots finish. Webhooks cover completion, cancellation, and decline; verify raw-body HMAC with the server’s webhook secret and keep polling as a fallback because delivery is best effort.</p>
     <p><a href="https://github.com/achren-oss/nimmari/blob/main/skills/nimmari/SKILL.md">Use the portable agent skill →</a> Its helpers prepare drafts, check prefill, and poll for a validated signed PDF. The owner web UI and manual setup remain secondary alternatives.</p>
   </section>

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Create a link-only PDF signing workflow. Requires Python 3 and requests."""
+import uuid
 import argparse
 import json
 from env import nimmari_env
@@ -21,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pdf", type=Path, nargs="?")
     parser.add_argument("--title")
+    parser.add_argument("--idempotency-key", default=None, help="Reuse the same key and body after a send timeout")
     parser.add_argument("--fields", help='JSON object: {"fields": [...]}')
     parser.add_argument("--prefill", help="JSON object mapping unique field names to string values")
     parser.add_argument("--signers", help="JSON array of signers (email, name, key, optional order)")
@@ -86,8 +88,8 @@ def main():
             doc_id = args.send_only
             path = "/api/documents/" + quote(doc_id, safe="")
             doc = api("GET", path)
-            if doc.get("status") != "draft":
-                raise ValueError("--send-only requires an existing draft")
+            if doc.get("status") != "draft" and not args.idempotency_key:
+                raise ValueError("--send-only requires a draft, or the original --idempotency-key for replay")
         else:
             data = {"title": args.title, "notify": "false", "auditTimezone": args.audit_timezone}
             if args.webhook_url:
@@ -122,7 +124,10 @@ def main():
                     raise RuntimeError("Prefill verification failed; draft was not sent")
                 return
             doc = checked
-        result = api("POST", path + "/send", json={"signers": signers, "notify": False})
+        idempotency_key = args.idempotency_key or str(uuid.uuid4())
+        print(f"Send Idempotency-Key: {idempotency_key}; retain for retry", file=sys.stderr)
+        result = api("POST", path + "/send", headers={"Idempotency-Key": idempotency_key},
+                     json={"signers": signers, "notify": False})
         if "signers" in result:
             links = result["signers"]
         else:

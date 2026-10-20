@@ -2,7 +2,21 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.4.0] - 2026-10-20
+
+### Added
+
+- Owner-scoped document pagination and signer summaries.
+- Atomic signing-link reissue and invitation resend without duplicate slots.
+- Persistent 24-hour send idempotency with concurrent duplicate protection.
+- Transactional webhook outbox, leases, retries, history, processing and manual redelivery.
+- Reusable synthetic end-to-end smoke and fresh signing-view hero screenshot.
+
+### Changed
+
+- Docker processes webhook retries in an optional interval worker; serverless supports authenticated cron and opportunistic processing.
+- New production webhook URLs require HTTPS; existing public HTTP destinations remain supported.
+- Additive journaled migration 0009; existing keys, tokens and documents remain compatible.
 
 ### Docs
 

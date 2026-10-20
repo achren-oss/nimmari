@@ -1,5 +1,7 @@
 # Nimmari
 
+Website: https://nimmari.joakimachren.com
+
 **AI agents: start here → [INSTALL-FOR-AGENTS.md](INSTALL-FOR-AGENTS.md)** — default: agent deploy with Render + Turso API keys, then one-time setup claim (no server root key).
 
 **No keys for the agent:** alternative for users who don't want to give an agent provider keys.

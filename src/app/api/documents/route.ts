@@ -1,6 +1,8 @@
+import { and, eq, lt, or, desc, inArray, sql } from "drizzle-orm";
+import { pageQuery, encodeCursor } from "@/lib/pagination";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { document, field } from "@/db/schema";
+import { document, field, signingSession } from "@/db/schema";
 import { getApiIdentity, authenticationFailure } from "@/lib/api-auth";
 import { id } from "@/lib/ids";
 import { sha256Hex } from "@/lib/hash";
@@ -107,4 +109,24 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ id: docId, importedFields: false });
+}
+
+export async function GET(req: Request) {
+  const identity = await getApiIdentity(req);
+  if (!identity) return authenticationFailure(req);
+  try {
+    const { q, limit, cursor } = pageQuery(req.url);
+    const statuses = q.has("status") ? q.get("status")!.split(",") : [];
+    if (statuses.some((s) => !["draft", "sent", "completed", "cancelled", "declined"].includes(s))) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    const rows = await db.select({ id: document.id, title: document.title, status: document.status, kind: document.kind, createdAt: document.createdAt, updatedAt: document.updatedAt }).from(document).where(and(eq(document.ownerId, identity.userId),
+      statuses.length ? sql`${document.status} in (${sql.join(statuses.map((s) => sql`${s}`), sql`,`)})` : undefined,
+      cursor ? or(lt(document.createdAt, new Date(cursor.time)), and(eq(document.createdAt, new Date(cursor.time)), lt(document.id, cursor.id))) : undefined,
+    )).orderBy(desc(document.createdAt), desc(document.id)).limit(limit + 1);
+    const page = rows.slice(0, limit);
+    const slots = page.length ? await db.select({ documentId: signingSession.documentId, key: signingSession.signerKey, name: signingSession.recipientName, email: signingSession.recipientEmail, signedAt: signingSession.signedAt, declinedAt: signingSession.declinedAt, expiresAt: signingSession.expiresAt }).from(signingSession).where(inArray(signingSession.documentId, page.map((r) => r.id))) : [];
+    return NextResponse.json({ documents: page.map((row) => ({ ...row, signers: slots.filter((s) => s.documentId === row.id).map((s) => ({ key: s.key, name: s.name, email: s.email, status: s.signedAt ? "signed" : s.declinedAt ? "declined" : s.expiresAt < new Date() ? "expired" : "pending", signedAt: s.signedAt })) })), nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null });
+  } catch (error) {
+    if (error instanceof Error && /^Invalid (cursor|limit)$/.test(error.message)) return NextResponse.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
 }

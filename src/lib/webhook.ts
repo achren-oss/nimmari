@@ -1,4 +1,10 @@
+import { BlockList, isIP } from "node:net";
+import { nimmariEnv } from "./env";
 import crypto from "crypto";
+
+const blockedAddresses = new BlockList();
+for (const [address, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4]] as const) blockedAddresses.addSubnet(address, prefix, "ipv4");
+for (const [address, prefix] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) blockedAddresses.addSubnet(address, prefix, "ipv6");
 
 /**
  * Generate HMAC signature for webhook payload
@@ -22,7 +28,7 @@ export function verifyWebhookSignature(
 /**
  * Check if a URL is safe to make requests to (prevent SSRF)
  */
-export function isSafeWebhookUrl(url: string): boolean {
+export function isSafeWebhookUrl(url: string, existing = false): boolean {
   try {
     const parsed = new URL(url);
 
@@ -31,39 +37,15 @@ export function isSafeWebhookUrl(url: string): boolean {
       return false;
     }
 
-    // Block private/internal IP ranges
-    const hostname = parsed.hostname.toLowerCase();
+    if (parsed.username || parsed.password) return false;
+    if (nimmariEnv("WEBHOOK_ALLOW_PRIVATE") === "1") return true;
 
-    // Block localhost
-    if (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "::1" ||
-      hostname.startsWith("127.") ||
-      hostname === "0.0.0.0"
-    ) {
-      return false;
-    }
+    if (!existing && process.env.NODE_ENV === "production" && parsed.protocol !== "https:") return false;
 
-    // Block private IPv4 ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
-    const ipv4Private = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
-    if (ipv4Private.test(hostname)) {
-      return false;
-    }
-
-    // Block link-local addresses
-    if (hostname.startsWith("169.254.")) {
-      return false;
-    }
-
-    // Block IPv6 private ranges
-    if (
-      hostname.startsWith("fc00:") ||
-      hostname.startsWith("fd00:") ||
-      hostname.startsWith("fe80:")
-    ) {
-      return false;
-    }
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+    const family = isIP(hostname);
+    if (family && blockedAddresses.check(hostname, family === 6 ? "ipv6" : "ipv4")) return false;
+    if (hostname === "localhost") return false;
 
     // Block special domains
     const blockedDomains = [
@@ -94,9 +76,10 @@ export async function sendWebhook(
   url: string,
   payload: object,
   secret?: string,
-): Promise<{ success: boolean; error?: string }> {
+  delivery?: { deliveryId: string; attempt: number },
+): Promise<{ success: boolean; error?: string; statusCode?: number }> {
   // Validate URL safety
-  if (!isSafeWebhookUrl(url)) {
+  if (!isSafeWebhookUrl(url, true)) {
     return { success: false, error: "Webhook URL is not allowed (SSRF protection)" };
   }
 
@@ -105,6 +88,11 @@ export async function sendWebhook(
     "Content-Type": "application/json",
     "User-Agent": "Nimmari-Webhook/1.0",
   };
+
+  if (delivery) {
+    headers["X-Nimmari-Delivery-Id"] = delivery.deliveryId;
+    headers["X-Nimmari-Attempt"] = String(delivery.attempt);
+  }
 
   // Add HMAC signature if secret is provided
   if (secret) {
@@ -115,23 +103,23 @@ export async function sendWebhook(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-    const response = await fetch(url, {
+    let response;
+    try { response = await fetch(url, {
+      redirect: "error",
       method: "POST",
       headers,
       body: payloadStr,
       signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    }); } finally { clearTimeout(timeoutId); }
 
     if (!response.ok) {
       return {
-        success: false,
+        success: false, statusCode: response.status,
         error: `Webhook returned ${response.status}: ${response.statusText}`,
       };
     }
 
-    return { success: true };
+    return { success: true, statusCode: response.status };
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === "AbortError") {

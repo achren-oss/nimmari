@@ -1,3 +1,4 @@
+import { scheduleWebhookWork } from "./webhook-worker";
 import { nimmariEnv } from "@/lib/env";
 import { bearerFailureRateLimit } from "@/lib/rate-limit";
 import { and, eq, isNull } from "drizzle-orm";
@@ -31,14 +32,17 @@ export async function getApiIdentity(req: Request, options: { allowOwnerlessRoot
     const key = match[1];
     if (matchesRootKey(key)) {
       const userId = nimmariEnv("API_OWNER_ID") || "";
+      if (userId || options.allowOwnerlessRoot) scheduleWebhookWork(userId || undefined);
       return userId || options.allowOwnerlessRoot ? { userId, scope: "admin", via: "root" } : bearerFailure(req);
     }
     const row = await db.query.apiKey.findFirst({ where: and(eq(apiKey.keyHash, hashApiKey(key)), isNull(apiKey.revokedAt)) });
     if (!row) return bearerFailure(req);
     try { await db.update(apiKey).set({ lastUsedAt: new Date() }).where(eq(apiKey.id, row.id)); } catch { /* Usage tracking must not prevent authentication. */ }
+    scheduleWebhookWork(row.ownerUserId);
     return { userId: row.ownerUserId, scope: row.scope, keyId: row.id, via: "key" };
   }
   const session = await getServerSession();
+  if (session?.user) scheduleWebhookWork(session.user.id);
   return session?.user ? { userId: session.user.id, scope: "regular", via: "session" } : null;
 }
 

@@ -225,3 +225,18 @@ it("returns 429 for repeated bearer failures without blocking valid credentials"
   expect(Number(limited.headers.get("Retry-After"))).toBeGreaterThan(0);
   expect((await keys.GET(req("test-root-key"))).status).toBe(200);
 });
+
+it("guards every 1.4 owner route and permits owner sessions only where documented", async () => {
+  const list = await import("@/app/api/documents/route");
+  const reissue = await import("@/app/api/documents/[id]/signers/[slot]/reissue/route");
+  const resend = await import("@/app/api/documents/[id]/resend/route");
+  const history = await import("@/app/api/documents/[id]/webhooks/route");
+  const deliveries = await import("@/app/api/webhooks/deliveries/route");
+  const process = await import("@/app/api/webhooks/deliveries/process/route");
+  const redeliver = await import("@/app/api/webhooks/deliveries/[id]/redeliver/route");
+  const params = { params: Promise.resolve({ id: "missing", slot: "missing" }) };
+  for (const call of [() => list.GET(request()), () => reissue.POST(request(), params), () => resend.POST(request(), params), () => history.GET(request(), params), () => deliveries.GET(request()), () => process.POST(request()), () => redeliver.POST(request(), params)]) expect((await call()).status).toBe(401);
+  local.session.mockResolvedValue({ user: { id: "session-only-owner" } });
+  expect((await list.GET(request())).status).toBe(200);
+  for (const call of [() => deliveries.GET(request()), () => process.POST(request()), () => redeliver.POST(request(), params)]) expect((await call()).status).toBe(403);
+});

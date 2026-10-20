@@ -46,6 +46,7 @@ beforeEach(async () => {
   vi.unstubAllEnvs();
   state.email.mockReset().mockResolvedValue({ data: { id: "email" }, error: null });
   state.webhook.mockReset().mockResolvedValue({ success: true });
+  await db.delete(schema.webhookDelivery); await db.delete(schema.sendIdempotency);
   await db.delete(schema.field); await db.delete(schema.signingSession); await db.delete(schema.document); await db.delete(schema.user);
   const now = new Date();
   const pdf = await PDFDocument.create(); pdf.addPage([800, 842]);
@@ -81,6 +82,9 @@ describe("signing lifecycle on libsql", () => {
       await parsed.destroy();
     }
     expect(state.webhook).toHaveBeenCalledTimes(1);
+    const deliveries = await db.select().from(schema.webhookDelivery);
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({ eventType: "document.completed", status: "delivered", attemptCount: 1 });
   });
   it("cancel invalidates GET and POST tokens and rejects repeated cancellation", async () => {
     expect((await cancel(request({ reason: "Withdrawn" }), docParams())).status).toBe(200);

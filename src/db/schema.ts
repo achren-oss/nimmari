@@ -166,3 +166,32 @@ export const setupClaim = sqliteTable("setup_claim", {
   claimedAt: integer("claimed_at", { mode: "timestamp" }),
   userId: text("user_id"),
 });
+
+export const sendIdempotency = sqliteTable("send_idempotency", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  documentId: text("document_id").notNull().references(() => document.id, { onDelete: "cascade" }),
+  requestHash: text("request_hash").notNull(),
+  response: text("response").notNull(),
+  statusCode: integer("status_code").notNull().default(200),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+});
+
+export const webhookDelivery = sqliteTable("webhook_delivery", {
+  id: text("id").primaryKey(),
+  documentId: text("document_id").notNull().references(() => document.id, { onDelete: "cascade" }),
+  ownerId: text("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  payload: text("payload").notNull(),
+  url: text("url").notNull(),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  status: text("status", { enum: ["pending", "delivered", "failed"] }).notNull().default("pending"),
+  nextAttemptAt: integer("next_attempt_at", { mode: "timestamp" }).notNull(),
+  leaseToken: text("lease_token"),
+  leaseUntil: integer("lease_until", { mode: "timestamp" }),
+  lastStatusCode: integer("last_status_code"),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [index("webhook_due_idx").on(t.status, t.nextAttemptAt), index("webhook_owner_idx").on(t.ownerId, t.createdAt)]);

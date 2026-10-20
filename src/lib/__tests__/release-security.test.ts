@@ -50,3 +50,9 @@ it("requires an authentication guard on every API route", () => {
     }
   }
 });
+
+it("covers all release 1.4 routes with owner or agent authentication", () => {
+  for (const name of ["documents/route.ts", "documents/[id]/resend/route.ts", "documents/[id]/signers/[slot]/reissue/route.ts", "documents/[id]/webhooks/route.ts", "webhooks/deliveries/route.ts", "webhooks/deliveries/process/route.ts", "webhooks/deliveries/[id]/redeliver/route.ts"]) {
+    expect(readFileSync(`src/app/api/${name}`, "utf8"), name).toMatch(/await (getApiIdentity|getAgentIdentity)\(req/);
+  }
+});

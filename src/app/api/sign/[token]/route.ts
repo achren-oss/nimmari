@@ -1,5 +1,5 @@
-import { appUrl } from "@/lib/app-url";
 import { nimmariEnv } from "@/lib/env";
+import { appUrl } from "@/lib/app-url";
 import { clientIp, rateLimitIpDebugHeaders } from "@/lib/client-ip";
 import { fieldMatchesSigner } from "@/lib/signer-assignment";
 import { writeTransaction } from "@/lib/write-transaction";
@@ -9,11 +9,11 @@ import { NextResponse } from "next/server";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { document, field, signingSession, user } from "@/db/schema";
+import { document, field, signingSession, user, webhookDelivery } from "@/db/schema";
 import { fieldsVisibleToSigner } from "@/lib/field-visibility";
 import { isValidSignaturePng, validateAndNormalizeDate } from "@/lib/validators";
 import { signRateLimit, signRateLimitWithCount } from "@/lib/rate-limit";
-import { sendWebhook } from "@/lib/webhook";
+import { deliveryValues, processDeliveries } from "@/lib/webhook-outbox";
 import { buildSignerFieldPayload } from "@/lib/signer-fields";
 import { sendSigningEmail } from "@/lib/email";
 import {
@@ -298,7 +298,13 @@ export async function POST(
     const artifact = await rebuildSignedArtifact(locked[0], latestFields, sessions);
     await tx.update(document).set({ ...artifact, status: allSigned ? "completed" : "sent" })
       .where(eq(document.id, doc.id));
-    return { allSigned, sessions };
+    const delivery = allSigned && doc.webhookUrl ? deliveryValues(doc, "document.completed", {
+      event: "document.completed", completedAt: now.toISOString(),
+      document: { id: doc.id, title: doc.title, kind: doc.kind, status: "completed" },
+      signers: sessions.map((session) => ({ email: session.recipientEmail, name: session.recipientName, signedAt: session.signedAt?.toISOString() ?? null })),
+    }) : null;
+    if (delivery) await tx.insert(webhookDelivery).values(delivery);
+    return { allSigned, sessions, deliveryId: delivery?.id };
   });
   if (signed === "fields-changed") {
     return NextResponse.json({ error: "Document fields changed. Reload the page before signing." }, { status: 409 });
@@ -347,37 +353,7 @@ export async function POST(
     });
   }
 
-  // If all signers have signed and there's a webhook URL, POST to it
-  if (allSigned && doc.webhookUrl) {
-    const webhookSecret = nimmariEnv("WEBHOOK_SECRET");
-    const result = await sendWebhook(
-      doc.webhookUrl,
-      {
-        event: "document.completed",
-        completedAt: now.toISOString(),
-        document: {
-          id: doc.id,
-          title: doc.title,
-          kind: doc.kind,
-          status: "completed",
-        },
-        signers: latestSigners.map((session) => ({
-          email: session.recipientEmail,
-          name: session.recipientName,
-          signedAt:
-            session.id === s.id
-              ? now.toISOString()
-              : session.signedAt?.toISOString() ?? null,
-        })),
-      },
-      webhookSecret,
-    );
-
-    if (!result.success) {
-      console.error("Webhook delivery failed:", result.error);
-      // Don't block the signing response if webhook fails
-    }
-  }
+  if (allSigned && doc.webhookUrl) await processDeliveries(doc.ownerId, signed.deliveryId).catch(() => undefined);
 
   return NextResponse.json({ ok: true, ...notices });
 }

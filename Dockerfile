@@ -27,6 +27,7 @@ RUN apt-get update \
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
+    NIMMARI_WEBHOOK_WORKER=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \

@@ -284,7 +284,7 @@ the Drizzle journal and runs once. This adds no public account-disable endpoint.
 
 Configuration: `NIMMARI_*` variables take precedence over deprecated `PUUMERKKI_*` aliases, including explicitly empty values. Existing API keys retain the `pmk_` prefix.
 
-For fresh hosted setup, follow [INSTALL-FOR-AGENTS.md](../../../INSTALL-FOR-AGENTS.md): generate a one-time setup code, use Deploy to Render, then claim /api/setup/claim. Existing root/API-key provisioning remains supported.
+For fresh hosted setup, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/nimmari/blob/main/INSTALL-FOR-AGENTS.md): agent deployment with a Render API key and Turso Platform API token, followed by the one-time setup claim, is the default (no server root key). The Deploy to Render button is the alternative for users who don't want to give an agent provider keys. Existing root/API-key provisioning remains supported.
 
 
 ### Field requirements and editing

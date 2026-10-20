@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nimmari — E-signatures on your own infrastructure</title>
-  <meta name="description" content="Open-source, self-host-only e-signatures for PDFs and HTML forms, with an API built for AI agents. Deploy your own Nimmari instance with Render and Turso.">
+  <title>Nimmari — Your agent prepares. You sign.</title>
+  <meta name="description" content="Agent-first, self-host-only e-signatures. Give your agent a document, PDF or photo; it prepares, prefills and delivers a signing link in chat. You sign.">
   <link rel="canonical" href="https://nimmari.joakimachren.com/">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Nimmari — E-signatures on your own infrastructure">
-  <meta property="og:description" content="Open-source e-signatures with an API built for AI agents. No hosted SaaS: run your own instance.">
+  <meta property="og:title" content="Nimmari — Your agent prepares. You sign.">
+  <meta property="og:description" content="Agent-first e-signatures: your agent does the work, you hand over the document and sign. Open source and self-host only.">
   <meta property="og:url" content="https://nimmari.joakimachren.com/">
   <meta property="og:image" content="https://nimmari.joakimachren.com/img/dashboard.png">
   <meta property="og:image:width" content="1280">
@@ -19,30 +19,42 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<header class="wrap"><a class="brand" href="./" aria-label="Nimmari home">nimmari<span aria-hidden="true">.</span></a><nav aria-label="Main navigation"><a href="#features">Features</a><a href="#install">Install</a><a href="https://github.com/achren-oss/nimmari">GitHub ↗</a></nav></header>
+<header class="wrap"><a class="brand" href="./" aria-label="Nimmari home">nimmari<span aria-hidden="true">.</span></a><nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#features">Features</a><a href="#install">Install</a><a href="https://github.com/achren-oss/nimmari">GitHub ↗</a></nav></header>
 <main id="main">
   <section class="hero wrap">
     <p class="eyebrow">Open source · Self-host only · AGPL-3.0</p>
-    <h1>Your documents.<br>Your instance.<br>Your signature.</h1>
-    <p class="intro">Nimmari is an e-signature service with an API built for AI agents. Upload a PDF or HTML form, prepare its fields, and send a signing link.</p>
-    <p>There is no hosted SaaS. You run your own instance on infrastructure you control.</p>
+    <h1>Your agent prepares.<br>You sign.</h1>
+    <p class="intro">Hand your agent a document, PDF, HTML form, or photo of a paper form. It installs Nimmari, prepares and prefills the document, confirms signers, and delivers signing links in chat. You sign and fill only what your agent cannot know, such as a personal ID.</p>
+    <p>Only signature fields are mandatory by default. There is no hosted SaaS: your agent runs your instance on infrastructure you control.</p>
     <div class="actions"><a class="button" href="#install">Set up with your agent <span aria-hidden="true">↗</span></a><a href="https://github.com/achren-oss/nimmari/blob/main/README.md">Read the docs →</a></div>
     <p class="small">Nimmari is Finnish for “autograph”. Formerly Puumerkki.</p>
-    <figure class="lead-image"><img src="img/dashboard.png" width="1280" height="800" alt="Nimmari dashboard showing documents and their signing status"><figcaption>Prepare documents and follow their signing status.</figcaption></figure>
+    <figure class="lead-image"><img src="img/dashboard.png" width="1280" height="800" alt="Nimmari dashboard showing documents and their signing status"><figcaption>The optional owner dashboard; agents prepare and track documents through the API.</figcaption></figure>
+  </section>
+  <section id="how-it-works" class="wrap section">
+    <p class="eyebrow">How it works</p><h2>Your agent does the work.<br>You hand over the document and sign.</h2>
+    <ol>
+      <li><strong>Install and configure.</strong> Give your agent Render and Turso provider keys privately. It deploys and completes <code>POST /api/setup/claim</code>, storing separate admin and document keys.</li>
+      <li><strong>Hand over the material.</strong> Your agent crops and straightens a photo into a PDF locally, inspects your PDF, or builds a self-contained HTML form. It confirms who signs, how many signers there are, which line belongs to each, and which blanks to fill.</li>
+      <li><strong>Prepare and prefill.</strong> It uploads via <code>POST /api/documents</code> (PDF) or <code>POST /api/documents/html</code>. PDF fields use <code>PUT /api/documents/{id}/fields</code>; HTML fields use <code>data-pm-field</code>. It assigns signer keys, fetches fields with <code>GET /api/documents/{id}</code>, prefills authorized known values with <code>PUT /api/documents/{id}/prefill</code>, and checks placement visually. Signatures stay yours.</li>
+      <li><strong>Get your link in chat.</strong> Your agent sends confirmed signer slots with <code>POST /api/documents/{id}/send</code> and <code>notify:false</code>, verifies <code>emailSent:false</code>, and privately delivers each returned URL to its intended signer. Upload multipart <code>notify="false"</code> also suppresses completion emails. No email delivery or signer account is needed; signer email is still required for the audit trail. Links expire after 30 days.</li>
+      <li><strong>Sign, then collect.</strong> You open your link, fill remaining unknown fields, and sign. Your agent polls <code>GET /api/documents/{id}</code> or reconciles lifecycle webhooks set by upload <code>webhookUrl</code>. After <code>completed</code>, it downloads and validates <code>GET /api/documents/{id}/pdf?signed=1</code>. It stops on cancellation or decline.</li>
+    </ol>
+    <p>For sequential signing without email, your agent delivers later links when earlier slots finish. Webhooks cover completion, cancellation, and decline; verify raw-body HMAC with the server’s webhook secret and keep polling as a fallback because delivery is best effort.</p>
+    <p><a href="https://github.com/achren-oss/nimmari/blob/main/skills/nimmari/SKILL.md">Use the portable agent skill →</a> Its helpers prepare drafts, check prefill, and poll for a validated signed PDF. The owner web UI and manual setup remain secondary alternatives.</p>
   </section>
   <section id="features" class="wrap section">
-    <p class="eyebrow">From document to signing link</p><h2>A web UI for people.<br>An API for agents.</h2>
+    <p class="eyebrow">From document to signing link</p><h2>An API for the work.<br>A link for the signature.</h2>
     <div class="grid features">
       <article><h3>PDFs &amp; HTML forms</h3><p>Place text, multiline text, checkbox, date, personal identity text, and signature fields. Import existing PDF AcroForm fields or use HTML form mode.</p></article>
       <article><h3>One signer or several</h3><p>Use parallel or sequential signer slots, including distinct roles with the same email. Signers need no account; signing links expire after 30 days.</p></article>
-      <article><h3>Prepare, then send</h3><p>Prefill draft fields, set required fields, and use private signing views. Documents support cancellation and signer decline.</p></article>
+      <article><h3>Prepare, then send</h3><p>Agents prefill known values; only signatures are required by default. Use private signing views when needed. Documents support cancellation and signer decline.</p></article>
       <article><h3>Audit seals</h3><p>Combined audit seals record signing metadata, with timezone controls and a SHA-256 content hash.</p></article>
       <article><h3>Connect your workflow</h3><p>Use scoped, hashed API keys and admin account provisioning. Optional Resend email and outbound lifecycle webhooks connect your instance to other services.</p></article>
       <article><h3>Choose your infrastructure</h3><p>Run the Docker image on Render or your own host. Documents and signed outputs live in your configured database; back it up and test restores.</p></article>
     </div>
     <div class="grid screenshots">
       <figure><img src="img/sign.png" width="1280" height="900" loading="lazy" alt="Signing view with document fields and a signature area"><figcaption>A signing link opens the document for its signer.</figcaption></figure>
-      <figure><img src="img/login.png" width="1280" height="800" loading="lazy" alt="Nimmari owner login screen"><figcaption>Owners log in to their own instance.</figcaption></figure>
+      <figure><img src="img/login.png" width="1280" height="800" loading="lazy" alt="Nimmari owner login screen"><figcaption>Optional owner login for manual document management.</figcaption></figure>
       <figure class="seal"><img src="img/signed-seal.png" width="745" height="1053" loading="lazy" alt="Completed document page showing signatures on two signature lines"><figcaption>A completed document with signatures in place.</figcaption></figure>
     </div>
   </section>
@@ -57,7 +69,7 @@ Ask me for a Render API key, a Turso Platform API token, and my login details.
 Deploy the instance and complete the one-time setup claim.
 Keep credentials private and outside the repository.</code></pre>
     <p><a href="https://github.com/achren-oss/nimmari/blob/main/INSTALL-FOR-AGENTS.md">Follow the installation runbook →</a></p>
-    <div class="alternative"><h3>Prefer to keep provider keys to yourself?</h3><p>Use the Deploy to Render button instead. Create a Turso database, enter its credentials and a one-time setup code in Render, then give your agent the service URL and first-account details to complete the claim.</p>
+    <div class="alternative"><h3>Prefer to keep provider keys to yourself?</h3><p>Use the Deploy to Render button instead. Create a Turso database, enter its credentials and a one-time setup code in Render, then give your agent the service URL, setup code, and first-account details privately to complete the claim.</p>
     <a class="button secondary" href="https://render.com/deploy?repo=https://github.com/achren-oss/nimmari">Deploy to Render <span aria-hidden="true">↗</span></a>
     <p class="small">See the <a href="https://github.com/achren-oss/nimmari/blob/main/docs/deploy-render.md">Render deployment guide</a>. For Docker or other self-managed installations, see <a href="https://github.com/achren-oss/nimmari/blob/main/README.md#self-hosting">self-hosting options</a>.</p></div>
   </div></section>

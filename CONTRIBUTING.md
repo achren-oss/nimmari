@@ -4,7 +4,7 @@ Use English for code comments, UI strings, documentation, issues, and pull reque
 
 ## Development setup
 
-Use Node.js 20.19+ or a newer supported version and npm:
+Use Node.js 22.17+ in the 22.x line, or Node.js 24+ and npm (matching the locked dependencies; CI uses Node 22):
 
 ```sh
 npm ci

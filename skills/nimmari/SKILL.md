@@ -5,6 +5,8 @@ description: Nimmari (formerly Puumerkki) self-hosted e-signature; use when aske
 
 # Use Nimmari through HTTP
 
+Nimmari is agent-first: the human hands over the material and signs. The agent handles installation, configuration, accounts/keys, source preparation (including photos), field placement, authorized known-value prefill, confirmed signer selection, link delivery, tracking, signed PDF retrieval, webhooks, and updates. Signers fill only what the agent cannot know. Only signature fields are mandatory by default; require other fields only when requested. The owner UI and manual setup are secondary alternatives.
+
 Use this skill with any agent capable of HTTP requests and document inspection.
 Read [reference/api-cheatsheet.md](reference/api-cheatsheet.md) for request schemas,
 examples, validation details, lifecycle responses, and implementation sources.
@@ -12,21 +14,34 @@ Use the deployed instance's matching source when its version differs from this r
 
 For installation, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren-oss/nimmari/blob/main/INSTALL-FOR-AGENTS.md): agent deployment with Render + Turso API keys and one-time setup claim is the default (no server root key). The Deploy to Render button is the alternative for users who don't want to give an agent provider keys; local/self-managed installation requires an explicit user request.
 
+## End-to-end workflow
+
+Run helpers from this skill folder. For a photo, crop/straighten and convert to PDF locally (for example, `img2pdf photo.jpg -o form.pdf` after image cleanup); the server does not accept images or perform OCR. Inspect the source and confirm signers, count, line ownership, and wanted fields before placing anything.
+
+1. Upload PDF via `POST /api/documents` or HTML via `POST /api/documents/html`, with multipart `notify="false"` and optional `webhookUrl`. Save the document ID privately.
+2. Place PDF fields via `PUT /api/documents/{id}/fields`; HTML fields come from `data-pm-field` attributes. Use stable signer keys, keep non-signature fields optional unless requested, then fetch owner `GET /api/documents/{id}`.
+3. Prefill authorized known values via `PUT /api/documents/{id}/prefill` with `{"values":{...},"mode":"merge"}` (PDF IDs, HTML names). Never prefill signatures. Fetch again and verify values and assignments.
+4. Render every PDF page at 800px width, draw the configured boxes, and look at them before send. Preview self-contained HTML locally and inspect its extracted fields and signer attributes; never submit a real signing form as a preview.
+5. Send `POST /api/documents/{id}/send` with confirmed `signers` and `notify:false`; verify each returned `emailSent:false`. Use `--print-urls` with the helper to capture URLs privately, then deliver each secret link in chat only to its intended signer. The API still requires the signer's email for audit metadata, even without email delivery.
+6. Poll owner GET or reconcile HMAC-verified lifecycle webhooks; on `completed`, download `GET /api/documents/{id}/pdf?signed=1` with `scripts/fetch_signed_pdf.py`. Stop on cancellation/decline. Webhooks are best effort; keep polling as a fallback.
+
+The detailed steps below include the supported helper commands and recovery limits. Agent preparation uses owner endpoints; the human alone fills remaining signing fields and submits their signature.
+
 ## Establish the request
 
 - Ask explicitly: **“Who needs to sign this document?”**
-- Collect each signer's name, email, role, and intended signature line.
+- Confirm how many signers there are and collect each signer's name, email, role, and intended signature line before placing fields.
 - Ask whether signing must be sequential or parallel.
 - Ask which line belongs to whom when labels or roles are ambiguous.
 - Ask for missing facts before creating links; never guess contract values.
-- Prefill everything the requester has supplied or that is otherwise known.
+- Prefill authorized values supplied by the requester or otherwise known; never invent values.
 - Leave signatures and unknowable/sensitive values for the appropriate signer.
 - Use `hetu` for Finnish national ID; use text for a bank account.
 - Do not claim that `hetu` verifies identity, format, or checksum.
 - Explain that private fields are hidden/masked during signing but appear in full
   in the completed PDF to **all parties**, including full national IDs.
 - Confirm that this simple electronic signature fits the requested workflow.
-- Describe its actual mechanism: a drawn signature image and email-link identity.
+- Describe its actual mechanism: a drawn signature image and possession of a signer-specific link, with email recorded as audit metadata. Chat delivery does not verify email ownership.
 - Treat link possession as the ability to sign; no bank ID or strong authentication
   is implemented by this API.
 - Do not use this workflow for documents that require advanced or qualified signatures.
@@ -85,9 +100,9 @@ This removes widgets and AcroForm rather than baking native values/appearances
 into page content; printed page content and non-widget annotations remain.
 `Btn` becomes checkbox; `Tx` taller than 25pt becomes textarea. Text boxes grow
 upward to at least 20px. Repeat `--skip-prefix` and `--private NAME=signerKey`
-as needed; private fields become required hetu fields assigned to that key.
+as needed; private fields become required hetu fields assigned to that key. Change `required` to false if the user has not requested that requirement; the helper also preserves native required flags.
 Normalize rotated/cropped pages first. Review required flags, radio/dropdown
-conversions and layout. **Assign imported signature boxes to signers and add missing signature lines manually**.
+conversions and layout. **Assign imported signature boxes to signers and add missing signature lines explicitly**.
 
 
 - Use multipart `importAcroForm="true"` only when its conversions fit the form.
@@ -179,7 +194,7 @@ notification setting. No helper retries mutations automatically.
 
 ## Verify before delivering real links
 
-- Perform a dry run on a test/preview instance or disposable test document.
+- Only with deliberate synthetic-test authorization, perform a dry run on a test/preview instance or disposable test document. Otherwise inspect the real draft visually without sending or signing a test.
 - Use synthetic values and `example.com` signers, with upload and send `notify:false`.
 - Exercise the actual roles, privacy assignments, order, checkboxes, and long values.
 - Capture test flow output privately with `--print-urls > test-flow.json`, then run
@@ -223,7 +238,7 @@ notification setting. No helper retries mutations automatically.
 - Verify full synthetic IDs appear in the completed final PDF for all parties.
 - Use text extraction as an additional check, never as a substitute for looking.
 - Correct the source/fields and repeat the dry run if any check fails.
-- Create the real document **fresh** from the verified source and configuration.
+- After an authorized synthetic test, create the real document **fresh** from the verified source and configuration.
 - Do not reuse a signed test document or test links for humans.
 
 ## Send and monitor
@@ -233,7 +248,8 @@ notification setting. No helper retries mutations automatically.
 - Expect a later sequential signer to get 409 until all lower orders have signed.
 - Allow parallel signing; artifact writes are serialized by the implementation.
 - Handle both response shapes: one signer returns top-level `url`; multiple return `signers`.
-- Return the URLs, their signer/role mapping, and `expiresAt` to the requester.
+- Check `emailSent:false` for every slot, then deliver each secret URL only to its intended signer, with its role and `expiresAt`; do not expose other signers' links in shared chat.
+- With silent sequential signing, monitor session `signedAt` and deliver each later link when lower orders finish; the server sends no follow-up email for these slots.
 - Tell signers that links expire **30 days after send**.
 - For invitations, use `notify:true` with document notifications enabled; check
   `emailSent` and `emailNote`, rather than assuming an email was delivered.
@@ -245,7 +261,7 @@ notification setting. No helper retries mutations automatically.
   expiry is a session condition, not a document status.
 - Stop polling at terminal status and use `scripts/fetch_signed_pdf.py` to retrieve
   and validate the final PDF only when completed.
-- Remember fields and prefill lock after send; re-upload to change either.
+- Prefill locks after send. PDF fields remain editable until the first signature; include existing IDs to preserve metadata/values and keep the complete intended field list. Re-upload for changes after signing starts.
 - Do not add signers after any signature exists; send returns 409.
 - Do not blindly retry mutations after a timeout; inspect state first.
 - Read the reference for cancel, decline, expired links, and retained PDF access.

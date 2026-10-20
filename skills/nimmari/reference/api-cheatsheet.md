@@ -47,7 +47,7 @@ appearances or remove controls that would obscure overlays before uploading.
   `flattened.pdf` without widgets/AcroForm and `fields.json` in 800px coordinates.
   Requires `pypdf`; repeat `--skip-prefix PREFIX` or `--private NAME=signerKey`.
   Native widget values/appearances are removed, not baked in. Assign imported signature boxes to signers and add missing boxes
-  manually; review layout and required flags before upload.
+  explicitly; review layout and required flags before upload.
 - `scripts/nimmari_flow.py PDF --title TITLE --fields fields.json --prefill prefill.json
   --signers signers.json --no-send` prepares a draft and prints `documentId` and
   `prefilledCheck`. Verify the fetched fields, assignments and layout before send.
@@ -67,15 +67,15 @@ Example fields file for `nimmari_flow.py`:
 ```json
 {
   "fields": [
-    {"name":"party_name","type":"text","page":0,"x":70,"y":100,"width":300,"height":26,"required":true,"assignedSignerKey":"party"},
-    {"name":"national_id","type":"hetu","page":0,"x":70,"y":140,"width":220,"height":26,"required":true,"privateForOtherSigners":true,"assignedSignerKey":"party"},
+    {"name":"party_name","type":"text","page":0,"x":70,"y":100,"width":300,"height":26,"required":false,"assignedSignerKey":"party"},
+    {"name":"national_id","type":"hetu","page":0,"x":70,"y":140,"width":220,"height":26,"required":false,"privateForOtherSigners":true,"assignedSignerKey":"party"},
     {"name":"party_signature","type":"signature","page":0,"x":70,"y":250,"width":260,"height":65,"required":true,"assignedSignerKey":"party"},
     {"name":"reviewer_signature","type":"signature","page":0,"x":420,"y":250,"width":260,"height":65,"required":true,"assignedSignerKey":"reviewer"}
   ]
 }
 ```
 
-Adapt coordinates to the real printed form; these are illustrative, not a template.
+Adapt coordinates to the real printed form; these are illustrative, not a template. Non-signature fields are optional here; require them only when requested and prefill authorized known values.
 
 Signature fields should be about 40–45 PDF points tall, with their bottom on the signature line. Convert points to the 800px overlay coordinate space using `800 / pageWidthPt`. Stamping enforces a 40 pt minimum rendered height, growing upward without clipping and preserving the cropped image aspect ratio; field width and page bounds can limit this height. Native AcroForm signature boxes are extended upward to at least 40 pt while keeping their bottom.
 
@@ -119,11 +119,11 @@ Example (upload as multipart `html`):
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Agreement</title></head><body>
 <label>Name <input data-pm-field="party_name" data-pm-label="Name"
-  data-pm-required data-pm-signer-key="party"></label>
+  data-pm-signer-key="party"></label>
 <label>ID <input data-pm-field="national_id" data-pm-type="hetu"
-  data-pm-required data-pm-private data-pm-signer-key="party"></label>
+  data-pm-private data-pm-signer-key="party"></label>
 <label><input type="checkbox" data-pm-field="consent"
-  data-pm-required data-pm-signer-key="party"> I agree</label>
+  data-pm-signer-key="party"> I agree</label>
 <div data-pm-field="party_signature" data-pm-type="signature"
   data-pm-required data-pm-signer-key="party"></div>
 </body></html>
@@ -161,7 +161,7 @@ Text/textarea/date/hetu values have a 5000-character limit.
 Signer dates validate and normalize `YYYY-MM-DD`, `DD.MM.YYYY`, or `DD/MM/YYYY`;
 PDF output formats dates as `d.m.yyyy`. Prefill does not run that date validator;
 provide a valid ISO date yourself. `hetu` has **no format/checksum validation**,
-only required nonempty checks. Do not repeat API.md's conflicting older statement.
+only required nonempty checks.
 Required checkboxes must be submitted as `"true"`.
 
 **False-checkbox prefill caveat:** prefill marks only `"true"`, `"on"`, or `"1"`
@@ -214,6 +214,15 @@ With notifications enabled and a configured email provider, sequential invitatio
 emails go to the lowest-order signer first, then the next after signing.
 Signed-copy/owner notices are attempted on each signature, not exclusively completion.
 Check `emailSent`/`emailNote`; provider configuration/delivery can fail.
+For chat delivery set both upload multipart `notify="false"` and send JSON
+`notify:false`, verify `emailSent:false` for each returned slot, and deliver each
+secret URL only to its intended signer. Email remains required audit metadata.
+For silent sequential signing, monitor lower-order `signedAt` before delivering
+later links; no automatic email follow-up will occur.
+
+## Recovery without duplicate sessions
+
+Persist document IDs and send responses privately; no document-list API or owner API for recovering existing signing URLs exists. On a timeout after upload/send, do not blindly retry: owner GET can confirm known document/session state, but cannot recover lost URL tokens. Use the optional owner UI for document discovery or link recovery, then resume API work; obtain explicit authorization before cancelling/replacing a real document. Repeating send creates more slots, not a resend. Correct 400 payload errors; on 401 check the intended key/owner, and on 403 check scope. On 409 fetch current state before deciding whether the operation is still permitted. An expired link is not renewable through an API endpoint. Keep polling as a webhook fallback; no delivery history/replay API exists.
 
 ## Lifecycle and errors
 
@@ -223,18 +232,17 @@ Owner GET includes `cancelledAt`, `cancelReason`, `declinedAt`, `declineReason`,
 session `signedAt`, `signerKey`, `declinedAt`, `declineReason`, and field values.
 Decline requires an unexpired unsigned session; reasons are optional ≤ 1000 chars.
 No alternate decline mode is implemented. Terminal documents cannot be sent/cancelled.
-Fields/prefill are draft-only. Additional send calls can add signers before any
-signature exists, but return 409 once signing has started. Re-upload to change fields.
+Prefill is draft-only. PDF fields remain editable on drafts and sent documents until any signature exists; include existing IDs to retain values and metadata. Additional send calls add signer slots rather than resend existing invitations; they return 409 once signing has started. Re-upload for changes after signing begins.
 
 | Code | Meaning / action |
 | --- | --- |
 | 400 | Invalid payload, missing required values, bad date/PNG, ambiguous roles; inspect error |
 | 401 | Missing/incorrect owner authentication or server key/owner configuration |
-| 403 | PDF access forbidden |
+| 403 | Insufficient account/key scope, session rejected on key-only endpoints, or PDF access forbidden |
 | 404 | Missing document/token/artifact; signed PDF may not exist yet |
 | 409 | Wrong order, already signed, locked editing, started signing, or terminal state; inspect state |
 | 410 | Expired link or cancelled/declined document; inspect error and status, stop signing |
-| 413 | Upload/sign body exceeds limit |
+| 413 | Signer POST body exceeds 1 MiB; PDF/HTML upload size errors return 400 in the app (a host may reject earlier) |
 | 429 | Signer route IP rate limit; honor Retry-After |
 | 503 | Incomplete PDF withheld: `{"error":"PDF not ready"}`; retry after `Retry-After: 2` |
 
@@ -337,9 +345,9 @@ or download URLs. Reconcile using the document ID and owner API.
 
 ## Implementation sources
 
-Treat these files as authoritative over conflicting prose in API.md:
+Use the implemented contract and route handlers as the source of truth:
 
-- [API overview](../../../API.md), [owner authentication](../../../src/lib/api-auth.ts).
+- [Implemented OpenAPI contract](../../../openapi/current.yaml), [owner authentication](../../../src/lib/api-auth.ts).
 - [PDF upload](../../../src/app/api/documents/route.ts), [HTML upload](../../../src/app/api/documents/html/route.ts).
 - [Fields](../../../src/app/api/documents/[id]/fields/route.ts), [schema](../../../src/lib/field-schema.ts), [prefill](../../../src/app/api/documents/[id]/prefill/route.ts).
 - [Send](../../../src/app/api/documents/[id]/send/route.ts), [options](../../../src/lib/send-options.ts), [notify](../../../src/lib/notify.ts).

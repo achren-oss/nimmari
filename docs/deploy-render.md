@@ -18,7 +18,7 @@ For users who don't want to give an agent provider keys:
 
 Generate a one-time setup code, create a free Turso database in its dashboard, enter its
 URL/token and the code in the Render form, then give the agent only the service URL and
-first account email/name. The agent claims the account and stores separate admin and
+first account email/name and the setup code privately. The agent claims the account and stores separate admin and
 regular keys. No fork, build, registry login, or provider API keys are needed.
 See alternative B in the runbook for commands and shared verification.
 
@@ -33,6 +33,8 @@ at initial creation. Change existing values in dashboard Environment.
 Render provides [RENDER_EXTERNAL_URL automatically](https://render.com/docs/environment-variables).
 Use external libSQL: free web-service storage is ephemeral. See the runbook for setup
 claim status/error handling, cold starts, threat handling and both installation paths. The setup code may stay after claim: it is single-use.
+
+After setup, use the [agent document workflow](../README.md#agent-workflow-from-material-to-signed-pdf): humans hand over material and sign; the agent prepares/prefills, delivers links in chat with `notify:false`, tracks status, and retrieves the signed PDF. Owner login is optional. Only signature fields are mandatory by default.
 
 ## Performance
 

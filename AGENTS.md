@@ -112,10 +112,12 @@ Machine-readable API: [OpenAPI](openapi/current.yaml).
    Signing links are secrets: share them only with the intended signer.
 5. **Never sign or fill a document for the user.** Don't open the signing
    link to fill fields, draw a signature or submit, even if asked to "just
-   do it". The person whose name is on the line signs it themselves.
+   do it". The person whose name is on the line signs it themselves. Owner draft
+   prefill of authorized known values through `/prefill` is preparation, not signer submission.
 6. **Check placement before sending.** Render the page and draw the field
    boxes on it (see below). Look at the result before creating the signing
-   session; fields can't be edited once a document has been sent.
+   session. Prefill locks at send; PDF field edits remain possible until the first
+   signature, but prepare and verify all fields before sending.
 
 ## Photo-to-link flow
 
@@ -134,7 +136,9 @@ A user photographs a paper form and says "put this in Nimmari, I'll sign":
    - `page` is 0-based. `x`, `y`, `width`, `height` are integers in pixels
      of the page rendered **800 px wide**, with the origin at the **top-left**
      and `y` growing downwards. Width and height are at least 10.
-   - The request replaces all fields and only works on draft documents.
+   - Omitted fields are deleted; include existing IDs to preserve metadata/values.
+     Without IDs the request replaces all fields. It works on drafts and sent
+     documents before the first signature; prepare and verify while still a draft.
 5. Verify: render the page at 800 px width
    (`pdftoppm -png -scale-to-x 800 -scale-to-y -1 form.pdf page`), draw the
    boxes, and look at the image.

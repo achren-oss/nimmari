@@ -19,7 +19,14 @@ by the token in the path, without an owner bearer token.
 | `GET /api/documents/{id}` | Owner | Metadata, status, stop reasons/times, `fields`, `signingSessions` |
 | `PUT /api/documents/{id}/fields` | Owner | `{"fields":[...]}`; draft or unsigned sent; IDs update in place, no IDs replace all; returns `ok`, `fields` |
 | `PUT /api/documents/{id}/prefill` | Owner | `{"values":{"field-key":"value"},"mode":"merge"}`; draft only; returns `ok`, `filled` |
-| `POST /api/documents/{id}/send` | Owner | `{"signers":[...],"notify":false}`; returns signer links and `expiresAt` |
+| `GET /api/documents` | Owner | Paginated summaries; status, limit, cursor |
+| `POST /api/documents/{id}/signers/{slotKeyOrSessionId}/reissue` | Owner | Rotate an unsigned active slot link; optional notify |
+| `POST /api/documents/{id}/resend` | Owner | Rotate/redeliver existing active slots; optional signers, notify |
+| `GET /api/documents/{id}/webhooks` | Owner | Paginated delivery history |
+| `GET /api/webhooks/deliveries` | Owner key | Owner history; status, limit, cursor |
+| `POST /api/webhooks/deliveries/process` | Owner/admin key | Process due deliveries, admin may process all owners |
+| `POST /api/webhooks/deliveries/{id}/redeliver` | Owner key | Reset retry budget and attempt |
+| `POST /api/documents/{id}/send` | Owner | `Idempotency-Key` header plus `{"signers":[...],"notify":false}`; returns signer links and `expiresAt` |
 | `POST /api/documents/{id}/cancel` | Owner | Optional `{"reason":"Withdrawn"}` or empty body; returns `{"ok":true,"status":"cancelled"}` |
 | `GET /api/sign/{token}` | Token | Document/signing identity, `signedAt`, visible fields, prefilled values, `readOnly` |
 | `POST /api/sign/{token}` | Token | `{"values":{...},"signaturePng":"data:image/png;base64,..."}`; returns `{"ok":true}` |
@@ -222,7 +229,17 @@ later links; no automatic email follow-up will occur.
 
 ## Recovery without duplicate sessions
 
-Persist document IDs and send responses privately; no document-list API or owner API for recovering existing signing URLs exists. On a timeout after upload/send, do not blindly retry: owner GET can confirm known document/session state, but cannot recover lost URL tokens. Use the optional owner UI for document discovery or link recovery, then resume API work; obtain explicit authorization before cancelling/replacing a real document. Repeating send creates more slots, not a resend. Correct 400 payload errors; on 401 check the intended key/owner, and on 403 check scope. On 409 fetch current state before deciding whether the operation is still permitted. An expired link is not renewable through an API endpoint. Keep polling as a webhook fallback; no delivery history/replay API exists.
+Use `GET /api/documents?status=draft,sent&limit=20` to discover your documents instead of relying only on saved IDs. Follow the opaque `nextCursor`; ordering is creation time descending with ID as the tiebreaker. Invalid status/cursor/limit returns 400. Summaries include signer roles and state, never tokens.
+
+Always send with an `Idempotency-Key` (1–255 characters, for example a UUID), saved privately with the exact request. On timeout, retry the same body with the same key. The owner/document/key tuple stores the original response and URLs for 24 hours in the database; concurrent duplicates serialize. A different body with that key returns 422. After expiry a request can create new slots; inspect state first. Stored responses contain secret URLs and deserve the same database protection as signing tokens. Expired records are replaced lazily when the key is reused.
+
+`send` creates signer slots. `POST /api/documents/{id}/resend` creates no slots: it rotates links and re-delivers invitations for active unsigned slots. Optional `{signers:["slot-key"],notify:false}` selects roles and returns fresh URLs without email. `POST /api/documents/{id}/signers/{slotKeyOrSessionId}/reissue` rotates one unsigned slot's token, invalidates its old link, and resets expiry to 30 days, including for expired slots. Both default to the slot's original invitation preference gated by document notify; explicit `notify:false` is silent. Signed, stopped, completed, or sequentially waiting slots return 409. Resend without a selection skips signed/waiting slots. Although existing tokens remain stored for sequential invitation compatibility, rotation prevents reuse of a misplaced link. Deliver every returned secret URL only to its intended signer.
+
+Webhooks use a persistent outbox, enqueued atomically on completion/cancel/decline. Delivery is attempted immediately with a 10-second timeout, then retried after approximately 1 minute, 5 minutes, 30 minutes, 2 hours, and 12 hours (up to 20% jitter, six total attempts). Any non-2xx or transport failure retries; redirects are refused. DB leases prevent simultaneous workers from delivering the same item. Inspect `GET /api/documents/{id}/webhooks` or owner-only `GET /api/webhooks/deliveries?status=failed&limit=20&cursor=...`. History reports aggregate attempt count, last HTTP status/error, retry time and timestamps. `POST /api/webhooks/deliveries/{id}/redeliver` resets the retry budget and attempts again; an active lease returns 409. Receivers must deduplicate on `X-Nimmari-Delivery-Id`: network failures and expired leases can cause repeat delivery. `X-Nimmari-Attempt` is one-based. The existing `X-Puumerkki-Signature` remains HMAC-SHA256 hex over the exact JSON body.
+
+Authenticated API traffic and health checks opportunistically process at most three due deliveries. Docker defaults `NIMMARI_WEBHOOK_WORKER=1` for a 15-second interval; other standalone deployments can opt in. On serverless, schedule `POST /api/webhooks/deliveries/process` every minute with a bearer key. Regular keys process only their owner's deliveries; admin/root keys may process all. Keep the cron credential private. Poll `GET /api/documents/{id}` as the fallback.
+
+New webhook destinations require HTTPS in production. Existing public HTTP URLs continue delivering. Private/local destinations remain blocked unless `NIMMARI_WEBHOOK_ALLOW_PRIVATE=1` is explicitly configured for a trusted network or synthetic tests; this also allows local HTTP. Never enable it for untrusted document creators.
 
 ## Lifecycle and errors
 
@@ -251,8 +268,7 @@ Cancelled/declined token GET/POST signing routes return 410 with
 Unsigned sessions also lose PDF access. Already-signed sessions retain read-only
 signed-copy PDF access until expiry; incomplete stopped PDFs keep other signers'
 private values masked. Expiry remains 410 even after completion.
-There is no token-renewal endpoint. Inspect state before replacing expired links;
-creating a fresh document is the safe workflow after signing has begun.
+Use reissue to replace expired unsigned active slots; terminal documents cannot reopen.
 
 ## Privacy and final artifacts
 
@@ -304,7 +320,7 @@ Timestamps use per-upload `auditTimezone`, then `NIMMARI_AUDIT_TIMEZONE`, then
 ## Webhooks
 
 Public HTTP(S) only; private/local/metadata destinations are blocked by URL checks.
-Delivery is one best-effort POST, timeout 10 seconds, no retry. Status changes do
+Delivery uses a DB outbox with six attempts and backoff; inspect owner history. Status changes do
 not roll back on failure. Also poll authenticated owner GET, stopping at terminal status.
 When `NIMMARI_WEBHOOK_SECRET` is configured, `X-Puumerkki-Signature` is lowercase
 64-character HMAC-SHA256 hex over the exact JSON body, with no `sha256=` prefix.

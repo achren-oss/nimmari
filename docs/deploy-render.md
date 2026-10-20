@@ -22,7 +22,7 @@ first account email/name and the setup code privately. The agent claims the acco
 regular keys. No fork, build, registry login, or provider API keys are needed.
 See alternative B in the runbook for commands and shared verification.
 
-The Blueprint uses ghcr.io/achren-oss/nimmari:1.3.1, Frankfurt, free plan, one instance,
+The Blueprint uses ghcr.io/achren-oss/nimmari:1.4.0, Frankfurt, free plan, one instance,
 and /api/health. BETTER_AUTH_SECRET is generated. RENDER_EXTERNAL_URL supplies public
 and auth URL defaults. Existing APP_URL, BETTER_AUTH_URL, root keys and NIMMARI_*/PUUMERKKI_*
 aliases remain supported; explicit URLs take precedence.

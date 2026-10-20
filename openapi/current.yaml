@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nimmari implemented API
-  version: 1.0.0+unreleased
+  version: 1.4.0
   description: Implemented unversioned routes. Owner-scoped database bearer keys or Better Auth
     sessions for documents. Account/key management requires bearer keys; root/admin can
     provision accounts. Public signup is disabled. Root NIMMARI_API_KEY can bootstrap
@@ -501,6 +501,74 @@ paths:
         - ownerBearer: []
       operationId: postApiKeysKeyIdRevoke
   /api/documents:
+    get:
+      summary: List strictly owner-scoped document summaries
+      description: Never includes signing tokens or document content. Stable createdAt descending, id
+        descending ordering. Comma-separated statuses are supported.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Opaque nextCursor returned by prior page; stable createdAt desc, id desc ordering.
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Comma-separated draft,sent,completed,cancelled,declined values.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - documents
+                  - nextCursor
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DocumentSummary"
+                  nextCursor:
+                    type:
+                      - string
+                      - "null"
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     post:
       operationId: postApiDocuments
       summary: Upload PDF
@@ -562,6 +630,7 @@ paths:
                 webhookUrl: &id003
                   type: string
                   format: uri
+                  description: HTTPS required for new production destinations. Private/local targets blocked unless NIMMARI_WEBHOOK_ALLOW_PRIVATE=1. Existing public HTTP URLs continue delivery.
                 auditTimezone: &id004
                   type: string
                   description: IANA timezone; overrides NIMMARI_AUDIT_TIMEZONE (default
@@ -817,7 +886,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '422':
+          description: Idempotency-Key reused with a different body
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
       parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: Persist a unique key and exact body. Replay original response/URLs for 24 hours; concurrent requests create one slot set. Different body returns 422. Without header send creates new slots as before.
+        schema: {type: string, minLength: 1, maxLength: 255}
       - name: id
         in: path
         required: true
@@ -1274,6 +1353,346 @@ paths:
         required: true
         schema: *id001
       security: []
+  /api/documents/{id}/signers/{slotKeyOrSessionId}/reissue:
+    post:
+      summary: Rotate one existing unsigned active slot link
+      description: Atomically invalidates old token, resets expiry to 30 days (including expired slots).
+        Signed, stopped, completed or sequentially waiting slots return 409. Does not create a slot.
+        Existing plaintext tokens remain for sequential-invite compatibility; rotation is preferred
+        over recovery.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: &a1
+            type: string
+        - name: slotKeyOrSessionId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notify: &a2
+                  type: boolean
+                  description: Defaults to original slot invitation preference, gated by document notify. False
+                    disables email.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReissueResult"
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/documents/{id}/resend:
+    post:
+      summary: Rotate links and re-deliver existing active unsigned slots
+      description: Creates no slots. Omitted signers selects active unsigned slots; waiting sequential
+        slots are skipped. Explicitly selected waiting/signed slots return 409. notify:false returns
+        fresh links without email.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                signers:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 255
+                notify: *a2
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - signers
+                properties:
+                  signers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReissueResult"
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/documents/{id}/webhooks:
+    get:
+      summary: Read owner document delivery history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a1
+        - &a3
+          name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - &a4
+          name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Opaque nextCursor returned by prior page; stable createdAt desc, id desc ordering.
+        - &a5
+          name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - delivered
+              - failed
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: &a6
+                type: object
+                required:
+                  - deliveries
+                  - nextCursor
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+                  nextCursor:
+                    type:
+                      - string
+                      - "null"
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/webhooks/deliveries:
+    get:
+      summary: Read only the key owner's delivery history (including admin keys)
+      security:
+        - ownerBearer: []
+      parameters:
+        - *a3
+        - *a4
+        - *a5
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: *a6
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/webhooks/deliveries/process:
+    post:
+      summary: Claim and process at most three due deliveries
+      description: Regular key processes only its owner. Admin/root processes all owners. Suitable for
+        external cron every minute. DB leases coordinate workers across instances.
+      security:
+        - ownerBearer: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessResult"
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/webhooks/deliveries/{id}/redeliver:
+    post:
+      summary: Reset owner delivery retry budget and attempt immediately
+      description: Requires owner even for admin keys. Active leases return 409. Resets attemptCount to
+        zero, including delivered/failed items. Receivers must deduplicate by delivery ID.
+      security:
+        - ownerBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a1
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessResult"
+        "400":
+          description: Invalid body, status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Owner authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found or not owned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Lifecycle, signing order or active lease conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   securitySchemes:
     ownerBearer:
@@ -1294,6 +1713,151 @@ components:
       name: t
       description: Unexpired signing token associated with this document.
   schemas:
+    ReissueResult:
+      type: object
+      required:
+        - url
+        - signingSessionId
+        - expiresAt
+        - emailSent
+      properties:
+        key:
+          type:
+            - string
+            - "null"
+        url:
+          type: string
+          format: uri
+          description: Secret capability URL. Share only with intended signer.
+        signingSessionId: &a1
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        emailSent:
+          type: boolean
+        emailNote: *a1
+    ProcessResult:
+      type: object
+      required:
+        - processed
+      properties:
+        processed:
+          type: integer
+          minimum: 0
+          maximum: 3
+    DocumentSummary:
+      type: object
+      required:
+        - id
+        - title
+        - status
+        - kind
+        - createdAt
+        - updatedAt
+        - signers
+      properties:
+        id: *a1
+        title: *a1
+        status:
+          type: string
+          enum:
+            - draft
+            - sent
+            - completed
+            - cancelled
+            - declined
+        kind:
+          type: string
+          enum:
+            - pdf
+            - html
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        signers:
+          type: array
+          items:
+            type: object
+            required:
+              - key
+              - name
+              - email
+              - status
+              - signedAt
+            properties:
+              key:
+                type:
+                  - string
+                  - "null"
+              name:
+                type:
+                  - string
+                  - "null"
+              email:
+                type: string
+                format: email
+              status:
+                type: string
+                enum:
+                  - pending
+                  - signed
+                  - declined
+                  - expired
+              signedAt: &a2
+                type:
+                  - string
+                  - "null"
+                format: date-time
+    WebhookDelivery:
+      type: object
+      required:
+        - id
+        - documentId
+        - eventType
+        - url
+        - attemptCount
+        - status
+        - nextAttemptAt
+        - createdAt
+        - updatedAt
+      properties:
+        id: *a1
+        documentId: *a1
+        eventType:
+          type: string
+          enum:
+            - document.completed
+            - document.cancelled
+            - document.declined
+        url:
+          type: string
+          format: uri
+        attemptCount:
+          type: integer
+          minimum: 0
+          description: Attempts in current retry budget; manual redeliver resets this.
+        status:
+          type: string
+          enum:
+            - pending
+            - delivered
+            - failed
+        nextAttemptAt: *a2
+        lastStatusCode:
+          type:
+            - integer
+            - "null"
+        lastError:
+          type:
+            - string
+            - "null"
+          maxLength: 500
+        createdAt: *a2
+        updatedAt: *a2
     ApiKey:
       type: object
       required:
@@ -1647,6 +2211,12 @@ x-webhook-events:
   - document.completed
   - document.cancelled
   - document.declined
-  description: Best-effort POST to upload webhookUrl. Optional X-Puumerkki-Signature
-    is lowercase hex HMAC-SHA256 of exact raw body bytes with NIMMARI_WEBHOOK_SECRET.
-    No durable retries or subscription API.
+  description: Transactional DB outbox POST to upload webhookUrl. Immediate attempt, then
+    1m/5m/30m/2h/12h backoff with up to 20 percent jitter; six attempts total.
+    Non-2xx and timeouts retry; redirects refused. Ten-second timeout and DB leases.
+    Optional X-Puumerkki-Signature is unchanged lowercase hex HMAC-SHA256 of exact
+    raw body bytes with NIMMARI_WEBHOOK_SECRET. X-Nimmari-Delivery-Id is stable across
+    attempts; X-Nimmari-Attempt is one-based. Receivers must deduplicate delivery IDs.
+    Owner history and manual redelivery are available; polling owner GET remains the fallback.
+    Authenticated requests and health process bounded batches; optional standalone
+    interval worker and authenticated external cron also trigger processing.

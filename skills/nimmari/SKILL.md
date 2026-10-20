@@ -22,7 +22,7 @@ Run helpers from this skill folder. For a photo, crop/straighten and convert to 
 2. Place PDF fields via `PUT /api/documents/{id}/fields`; HTML fields come from `data-pm-field` attributes. Use stable signer keys, keep non-signature fields optional unless requested, then fetch owner `GET /api/documents/{id}`.
 3. Prefill authorized known values via `PUT /api/documents/{id}/prefill` with `{"values":{...},"mode":"merge"}` (PDF IDs, HTML names). Never prefill signatures. Fetch again and verify values and assignments.
 4. Render every PDF page at 800px width, draw the configured boxes, and look at them before send. Preview self-contained HTML locally and inspect its extracted fields and signer attributes; never submit a real signing form as a preview.
-5. Send `POST /api/documents/{id}/send` with confirmed `signers` and `notify:false`; verify each returned `emailSent:false`. Use `--print-urls` with the helper to capture URLs privately, then deliver each secret link in chat only to its intended signer. The API still requires the signer's email for audit metadata, even without email delivery.
+5. Send `POST /api/documents/{id}/send` with a persisted `Idempotency-Key` header, confirmed `signers` and `notify:false`; verify each returned `emailSent:false`. Use `--print-urls` with the helper to capture URLs privately, then deliver each secret link in chat only to its intended signer. The API still requires the signer's email for audit metadata, even without email delivery.
 6. Poll owner GET or reconcile HMAC-verified lifecycle webhooks; on `completed`, download `GET /api/documents/{id}/pdf?signed=1` with `scripts/fetch_signed_pdf.py`. Stop on cancellation/decline. Webhooks are best effort; keep polling as a fallback.
 
 The detailed steps below include the supported helper commands and recovery limits. Agent preparation uses owner endpoints; the human alone fills remaining signing fields and submits their signature.
@@ -243,7 +243,7 @@ notification setting. No helper retries mutations automatically.
 
 ## Send and monitor
 
-- Send `POST /api/documents/{id}/send` with `signers` and `notify:false` for link-only delivery.
+- Send `POST /api/documents/{id}/send` with a persisted `Idempotency-Key`, `signers` and `notify:false` for link-only delivery.
 - Set `order:0,1,2,...` for sequential signing; omit `order` for parallel signing.
 - Expect a later sequential signer to get 409 until all lower orders have signed.
 - Allow parallel signing; artifact writes are serialized by the implementation.
@@ -263,7 +263,7 @@ notification setting. No helper retries mutations automatically.
   and validate the final PDF only when completed.
 - Prefill locks after send. PDF fields remain editable until the first signature; include existing IDs to preserve metadata/values and keep the complete intended field list. Re-upload for changes after signing starts.
 - Do not add signers after any signature exists; send returns 409.
-- Do not blindly retry mutations after a timeout; inspect state first.
+- Always use an `Idempotency-Key` on send; after timeout retry the same key and body. Use list to discover documents, reissue to recover lost or expired unsigned links, and resend to redeliver existing slots.
 - Read the reference for cancel, decline, expired links, and retained PDF access.
 
 ## Receive webhooks
@@ -275,7 +275,7 @@ notification setting. No helper retries mutations automatically.
 - Verify before parsing JSON; reject missing or malformed signatures when a secret is required.
 - Handle `document.completed`, `document.declined`, and `document.cancelled`.
 - Read exact event schemas in the reference; the payload has no signer URLs.
-- Do not assume retry delivery: the server makes one attempt with a 10-second timeout.
+- Inspect webhook delivery history; six attempts use persisted backoff. Schedule the process endpoint for serverless; keep polling as a fallback.
 - Reconcile events against owner GET responses; an HMAC alone supplies no replay protection.
 
 ### Account administration
@@ -308,3 +308,17 @@ For fresh hosted setup, follow [INSTALL-FOR-AGENTS.md](https://github.com/achren
 Only signature fields are required by default. Other field types (text, textarea, date, hetu, checkbox) are optional unless `required:true` is supplied. A visible signature field always requires a signature, even with `required:false`. HTML non-signature fields remain opt-in via `data-pm-required`. Existing stored flags are unchanged.
 
 Field PUT accepts optional existing field `id` values to update in place, preserving omitted metadata and stored flags. Fields omitted from the list are deleted; fields without IDs are inserted with generated names when needed. A request without IDs retains replace-all behavior. Drafts and sent documents with no signatures may be edited; signed, completed, cancelled or declined documents return 409. Pending signers see saved fields on their next load; no emails are sent.
+
+## Release 1.4 reliability
+
+Use `GET /api/documents?status=draft,sent&limit=20` to discover your documents instead of relying only on saved IDs. Follow the opaque `nextCursor`; ordering is creation time descending with ID as the tiebreaker. Invalid status/cursor/limit returns 400. Summaries include signer roles and state, never tokens.
+
+Always send with an `Idempotency-Key` (1–255 characters, for example a UUID), saved privately with the exact request. On timeout, retry the same body with the same key. The owner/document/key tuple stores the original response and URLs for 24 hours in the database; concurrent duplicates serialize. A different body with that key returns 422. After expiry a request can create new slots; inspect state first. Stored responses contain secret URLs and deserve the same database protection as signing tokens. Expired records are replaced lazily when the key is reused.
+
+`send` creates signer slots. `POST /api/documents/{id}/resend` creates no slots: it rotates links and re-delivers invitations for active unsigned slots. Optional `{signers:["slot-key"],notify:false}` selects roles and returns fresh URLs without email. `POST /api/documents/{id}/signers/{slotKeyOrSessionId}/reissue` rotates one unsigned slot's token, invalidates its old link, and resets expiry to 30 days, including for expired slots. Both default to the slot's original invitation preference gated by document notify; explicit `notify:false` is silent. Signed, stopped, completed, or sequentially waiting slots return 409. Resend without a selection skips signed/waiting slots. Although existing tokens remain stored for sequential invitation compatibility, rotation prevents reuse of a misplaced link. Deliver every returned secret URL only to its intended signer.
+
+Webhooks use a persistent outbox, enqueued atomically on completion/cancel/decline. Delivery is attempted immediately with a 10-second timeout, then retried after approximately 1 minute, 5 minutes, 30 minutes, 2 hours, and 12 hours (up to 20% jitter, six total attempts). Any non-2xx or transport failure retries; redirects are refused. DB leases prevent simultaneous workers from delivering the same item. Inspect `GET /api/documents/{id}/webhooks` or owner-only `GET /api/webhooks/deliveries?status=failed&limit=20&cursor=...`. History reports aggregate attempt count, last HTTP status/error, retry time and timestamps. `POST /api/webhooks/deliveries/{id}/redeliver` resets the retry budget and attempts again; an active lease returns 409. Receivers must deduplicate on `X-Nimmari-Delivery-Id`: network failures and expired leases can cause repeat delivery. `X-Nimmari-Attempt` is one-based. The existing `X-Puumerkki-Signature` remains HMAC-SHA256 hex over the exact JSON body.
+
+Authenticated API traffic and health checks opportunistically process at most three due deliveries. Docker defaults `NIMMARI_WEBHOOK_WORKER=1` for a 15-second interval; other standalone deployments can opt in. On serverless, schedule `POST /api/webhooks/deliveries/process` every minute with a bearer key. Regular keys process only their owner's deliveries; admin/root keys may process all. Keep the cron credential private. Poll `GET /api/documents/{id}` as the fallback.
+
+New webhook destinations require HTTPS in production. Existing public HTTP URLs continue delivering. Private/local destinations remain blocked unless `NIMMARI_WEBHOOK_ALLOW_PRIVATE=1` is explicitly configured for a trusted network or synthetic tests; this also allows local HTTP. Never enable it for untrusted document creators.

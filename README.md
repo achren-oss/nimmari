@@ -29,11 +29,11 @@ Documents are stored in your configured database. Optional Resend email sends si
 Start with [agent installation](INSTALL-FOR-AGENTS.md): privately provide a Render API key and Turso Platform API token; the agent deploys, completes `POST /api/setup/claim`, and stores separate admin and regular document keys. No owner login or manual environment copying is needed on this default path. Use the regular key as `Authorization: Bearer <key>` for document requests.
 
 1. **Prepare the material.** The agent inspects a PDF or crops/straightens a photo and converts it to PDF locally. It can also build a self-contained HTML form from supplied content. Confirm who signs, how many signers there are, which line belongs to each, and which blanks to fill before placing fields; never infer roles or invent values.
-2. **Create the document.** `POST /api/documents` with multipart `pdf` (up to 4 MiB), or `POST /api/documents/html` with multipart `html` (up to 2 MiB for files). Set upload `notify="false"` for silent operation and optional `webhookUrl` for lifecycle events. Save the returned `id` privately; there is no document-list API.
+2. **Create the document.** `POST /api/documents` with multipart `pdf` (up to 4 MiB), or `POST /api/documents/html` with multipart `html` (up to 2 MiB for files). Set upload `notify="false"` for silent operation and optional `webhookUrl` for lifecycle events. Save the returned `id` privately; rediscover documents with `GET /api/documents`.
 3. **Place and assign fields.** For PDFs, `PUT /api/documents/{id}/fields` with `{"fields":[...]}` using zero-based pages and top-left coordinates on an 800px-wide page. For HTML, use `data-pm-field` and signer attributes. Assign every multi-signer signature field to an `assignedSignerKey` matching a send-time `key`. Only signatures are required by default; add other requirements only when wanted.
 4. **Prefill and verify.** `GET /api/documents/{id}` returns fields; `PUT /api/documents/{id}/prefill` with `{"values":{"<field-id>":"known value"},"mode":"merge"}` fills PDF fields by ID (HTML by name). Prefill authorized known values, never signatures. Leave unknown values for the signer. Fetch again to check values and render every PDF page with field boxes at 800px width; inspect placement before sending. See the [skill](skills/nimmari/SKILL.md) for helpers and HTML preview guidance.
-5. **Send and deliver in chat.** `POST /api/documents/{id}/send` with `{"signers":[{"email":"signer@example.com","name":"Example Signer","key":"party"}],"notify":false}`. Verify `emailSent:false` for every slot; one signer returns `url`, multiple return `signers[].url`. Deliver each secret link only to its intended signer, with its expiry. Email delivery is optional, but a real signer email is still required as audit metadata. For sequential slots, the agent delivers later links when lower orders have signed; no email follow-up occurs with `notify:false`.
-6. **Track and retrieve.** Poll `GET /api/documents/{id}` until `completed`, or reconcile authenticated lifecycle webhooks with that GET. Stop on `cancelled` or `declined`. Download `GET /api/documents/{id}/pdf?signed=1` only after completion and validate the PDF; before completion it may be an intermediate artifact. The skill's `fetch_signed_pdf.py` polls and validates automatically. Webhooks are configured at upload, cover `document.completed`, `document.cancelled`, and `document.declined`, and make one best-effort delivery; verify raw-body HMAC with the server's `NIMMARI_WEBHOOK_SECRET` and retain polling as a fallback.
+5. **Send and deliver in chat.** `POST /api/documents/{id}/send` with an `Idempotency-Key` header and `{"signers":[{"email":"signer@example.com","name":"Example Signer","key":"party"}],"notify":false}`. Verify `emailSent:false` for every slot; one signer returns `url`, multiple return `signers[].url`. Deliver each secret link only to its intended signer, with its expiry. Email delivery is optional, but a real signer email is still required as audit metadata. For sequential slots, the agent delivers later links when lower orders have signed; no email follow-up occurs with `notify:false`.
+6. **Track and retrieve.** Poll `GET /api/documents/{id}` until `completed`, or reconcile authenticated lifecycle webhooks with that GET. Stop on `cancelled` or `declined`. Download `GET /api/documents/{id}/pdf?signed=1` only after completion and validate the PDF; before completion it may be an intermediate artifact. The skill's `fetch_signed_pdf.py` polls and validates automatically. Webhooks are configured at upload, cover `document.completed`, `document.cancelled`, and `document.declined`, and persist delivery attempts and retry failures; verify raw-body HMAC with the server's `NIMMARI_WEBHOOK_SECRET` and retain polling as a fallback.
 
 No signing or signer submissions by the agent on a real person's behalf. Private fields are hidden from other signers during signing, but completed PDFs expose all values to all parties; explain this before using them. For schemas, helper commands, and recovery guidance, see the [API reference](skills/nimmari/reference/api-cheatsheet.md).
 
@@ -142,7 +142,7 @@ Nimmari is self-host only. The default is [agent deployment with Render + Turso 
 
 - **Render + Turso:** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
-- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.3.1` (published from `v*` tags), or `docker build -t nimmari .`, then
+- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.4.0` (published from `v*` tags), or `docker build -t nimmari .`, then
   `docker run -p 3000:3000 -v nimmari-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host nimmari`.
   Without `DATABASE_URL` the image uses `/data/nimmari.db` for new installs, or reuses `/data/puumerkki.db` if only that legacy file exists (mount the existing volume). An explicit `DATABASE_URL` always wins. Migrations run on start; `/api/health` reports status.
 
@@ -207,6 +207,20 @@ Example first prompt:
 
 > Use the Nimmari skill to prepare this PDF for signing. Confirm who signs, how many signers there are, which line belongs to each person, and which blanks to fill. Prefill my authorized known values; leave only signatures and unknown values for signers. Verify field placement before sending, then return the signing links privately in chat without emailing them. Do not submit signing fields or signatures for anyone.
 
+## Reliable sends and webhook delivery
+
+Use `GET /api/documents?status=draft,sent&limit=20` to discover your documents instead of relying only on saved IDs. Follow the opaque `nextCursor`; ordering is creation time descending with ID as the tiebreaker. Invalid status/cursor/limit returns 400. Summaries include signer roles and state, never tokens.
+
+Always send with an `Idempotency-Key` (1–255 characters, for example a UUID), saved privately with the exact request. On timeout, retry the same body with the same key. The owner/document/key tuple stores the original response and URLs for 24 hours in the database; concurrent duplicates serialize. A different body with that key returns 422. After expiry a request can create new slots; inspect state first. Stored responses contain secret URLs and deserve the same database protection as signing tokens. Expired records are replaced lazily when the key is reused.
+
+`send` creates signer slots. `POST /api/documents/{id}/resend` creates no slots: it rotates links and re-delivers invitations for active unsigned slots. Optional `{signers:["slot-key"],notify:false}` selects roles and returns fresh URLs without email. `POST /api/documents/{id}/signers/{slotKeyOrSessionId}/reissue` rotates one unsigned slot's token, invalidates its old link, and resets expiry to 30 days, including for expired slots. Both default to the slot's original invitation preference gated by document notify; explicit `notify:false` is silent. Signed, stopped, completed, or sequentially waiting slots return 409. Resend without a selection skips signed/waiting slots. Although existing tokens remain stored for sequential invitation compatibility, rotation prevents reuse of a misplaced link. Deliver every returned secret URL only to its intended signer.
+
+Webhooks use a persistent outbox, enqueued atomically on completion/cancel/decline. Delivery is attempted immediately with a 10-second timeout, then retried after approximately 1 minute, 5 minutes, 30 minutes, 2 hours, and 12 hours (up to 20% jitter, six total attempts). Any non-2xx or transport failure retries; redirects are refused. DB leases prevent simultaneous workers from delivering the same item. Inspect `GET /api/documents/{id}/webhooks` or owner-only `GET /api/webhooks/deliveries?status=failed&limit=20&cursor=...`. History reports aggregate attempt count, last HTTP status/error, retry time and timestamps. `POST /api/webhooks/deliveries/{id}/redeliver` resets the retry budget and attempts again; an active lease returns 409. Receivers must deduplicate on `X-Nimmari-Delivery-Id`: network failures and expired leases can cause repeat delivery. `X-Nimmari-Attempt` is one-based. The existing `X-Puumerkki-Signature` remains HMAC-SHA256 hex over the exact JSON body.
+
+Authenticated API traffic and health checks opportunistically process at most three due deliveries. Docker defaults `NIMMARI_WEBHOOK_WORKER=1` for a 15-second interval; other standalone deployments can opt in. On serverless, schedule `POST /api/webhooks/deliveries/process` every minute with a bearer key. Regular keys process only their owner's deliveries; admin/root keys may process all. Keep the cron credential private. Poll `GET /api/documents/{id}` as the fallback.
+
+New webhook destinations require HTTPS in production. Existing public HTTP URLs continue delivering. Private/local destinations remain blocked unless `NIMMARI_WEBHOOK_ALLOW_PRIVATE=1` is explicitly configured for a trusted network or synthetic tests; this also allows local HTTP. Never enable it for untrusted document creators.
+
 ## Current API
 
 AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which line before creating fields, one signing session per signer, never submit signing fields or signatures on the user's behalf. Owner draft prefill of authorized known values is supported.
@@ -223,6 +237,7 @@ AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which
 | GET, POST | `/api/keys` | Bearer key | List key metadata or create a scoped key |
 | DELETE | `/api/keys/[id]` | Bearer key | Revoke a key |
 | POST | `/api/keys/[id]/revoke` | Bearer key | Revoke a key (POST alias) |
+| GET | `/api/documents` | Owner | Paginated summaries; `status`, `limit` (default 20, max 100), opaque `cursor` |
 | POST | `/api/documents` | Owner | Upload multipart `pdf`, optional `title`, `importAcroForm`, `notify`, `webhookUrl`, `auditTimezone`; returns document ID (4 MB limit) |
 | POST | `/api/documents/html` | Owner | Upload multipart `html` file or string and optional `title`; extracts fields (2 MB limit) |
 | GET | `/api/documents/[id]` | Owner | Read document metadata, fields, and signing sessions |
@@ -236,6 +251,12 @@ AI agents using this API must follow [AGENTS.md](AGENTS.md): ask who signs which
 | POST | `/api/sign/[token]/decline` | Unexpired unsigned signing token | Decline for all signers; optional `{reason}` |
 | POST | `/api/sign/[token]` | Unexpired signing token | Submit JSON `values` and `signaturePng` (PNG data URL or null); record this signer slot |
 | GET | `/api/sign/[token]/pdf` | Unexpired signing token | Download signed copy for an already-signed slot |
+| POST | `/api/documents/[id]/resend` | Owner | Rotate and deliver outstanding active slots; optional `signers`, `notify` |
+| POST | `/api/documents/[id]/signers/[slotKeyOrSessionId]/reissue` | Owner | Rotate one unsigned active slot; optional `notify` |
+| GET | `/api/documents/[id]/webhooks` | Owner | Paginated delivery history |
+| GET | `/api/webhooks/deliveries` | Owner bearer | Paginated owner delivery history; `status`, `limit`, `cursor` |
+| POST | `/api/webhooks/deliveries/process` | Owner/admin bearer | Process up to three due deliveries; admin can process all owners |
+| POST | `/api/webhooks/deliveries/[id]/redeliver` | Owner bearer | Reset retry budget and attempt delivery |
 | POST | `/api/webhooks/resend` | Verified Svix-style signature | Record Resend signing-link click events |
 
 Link-only delivery, for example a bot that returns the signing link in a chat instead of emailing it:
@@ -244,13 +265,14 @@ Link-only delivery, for example a bot that returns the signing link in a chat in
 curl -X POST "$APP_URL/api/documents/$DOC_ID/send" \
   -H "Authorization: Bearer $NIMMARI_API_KEY" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: <persisted-uuid-for-this-send>" \
   -d '{"email":"signer@example.com","name":"Signer Name","notify":false}'
 # {"url":"https://.../sign/<token>","signingSessionId":"ss_...","expiresAt":"...","emailSent":false,...}
 ```
 
 The recipient email is still recorded on the signing session and in the audit trail. The URL works for 30 days; treat it as a secret.
 
-All signing-token routes check expiry. Cancel/decline invalidate outstanding links; previously signed slots retain read-only PDF access until expiry. There is no document-list endpoint, webhook subscription API, or implemented versioned API.
+All signing-token routes check expiry. Cancel/decline invalidate outstanding links; previously signed slots retain read-only PDF access until expiry. The unversioned owner API includes listing and webhook history; there is no webhook subscription API or implemented versioned API.
 
 The [portable Nimmari agent skill](skills/nimmari/README.md) includes a full workflow, [API reference](skills/nimmari/reference/api-cheatsheet.md), and helpers. Clients use `NIMMARI_BASE_URL` and a provisioned regular key in `NIMMARI_API_KEY`. The implemented contract is [openapi/current.yaml](openapi/current.yaml); [openapi/v1.yaml](openapi/v1.yaml) remains the future design.
 

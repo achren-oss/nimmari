@@ -4,7 +4,7 @@ Nimmari is agent-first: after setup, the human hands over a document, PDF, HTML 
 
 ## A. Default: Agent deploy with Render + Turso API keys
 
-Use the prebuilt 1.4.0 image, then bootstrap through its one-time setup claim.
+Use the prebuilt 1.4.1 image, then bootstrap through its one-time setup claim.
 Keep credentials outside the repository. See AGENTS.md for real-document rules.
 For users who don't want to give an agent provider keys, use alternative B below.
 
@@ -185,7 +185,7 @@ import json, os, pathlib
 root = pathlib.Path(os.environ['INSTALL_DIR'])
 env = dict(line.split('=', 1) for line in pathlib.Path(os.environ['SERVER_ENV']).read_text().splitlines())
 body = {'type': 'web_service', 'name': 'nimmari', 'ownerId': os.environ['RENDER_OWNER_ID'],
-    'image': {'ownerId': os.environ['RENDER_OWNER_ID'], 'imagePath': 'ghcr.io/achren-oss/nimmari:1.4.0'},
+    'image': {'ownerId': os.environ['RENDER_OWNER_ID'], 'imagePath': 'ghcr.io/achren-oss/nimmari:1.4.1'},
     'serviceDetails': {'runtime': 'image', 'plan': 'free', 'region': 'frankfurt',
         'healthCheckPath': '/api/health', 'numInstances': 1},
     'envVars': [{'key': k, 'value': v} for k, v in env.items()]}
@@ -566,7 +566,7 @@ docker run -d --name nimmari --restart unless-stopped \
   -p "$PORT:3000" -v nimmari-data:/data \
   --env-file "$SERVER_ENV" \
   -e BETTER_AUTH_URL="$PUBLIC_URL" -e APP_URL="$PUBLIC_URL" \
-  ghcr.io/achren-oss/nimmari:1.4.0
+  ghcr.io/achren-oss/nimmari:1.4.1
 
 healthy=false
 for attempt in {1..60}; do

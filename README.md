@@ -142,7 +142,7 @@ Nimmari is self-host only. The default is [agent deployment with Render + Turso 
 
 - **Render + Turso:** Docker image with Chromium on Render, database on Turso. Both have free tiers. See [docs/deploy-render.md](docs/deploy-render.md) and `render.yaml`.
 - **Vercel + Turso:** serverless, uses `@sparticuz/chromium-min`. The free Hobby plan is for non-commercial use only. See [docs/deploy-vercel.md](docs/deploy-vercel.md).
-- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.4.0` (published from `v*` tags), or `docker build -t nimmari .`, then
+- **Any Docker host:** use the prebuilt image `ghcr.io/achren-oss/nimmari:1.4.1` (published from `v*` tags), or `docker build -t nimmari .`, then
   `docker run -p 3000:3000 -v nimmari-data:/data -e BETTER_AUTH_SECRET=... -e BETTER_AUTH_URL=https://your.host -e APP_URL=https://your.host nimmari`.
   Without `DATABASE_URL` the image uses `/data/nimmari.db` for new installs, or reuses `/data/puumerkki.db` if only that legacy file exists (mount the existing volume). An explicit `DATABASE_URL` always wins. Migrations run on start; `/api/health` reports status.
 

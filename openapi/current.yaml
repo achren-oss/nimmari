@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nimmari implemented API
-  version: 1.4.0
+  version: 1.4.1
   description: Implemented unversioned routes. Owner-scoped database bearer keys or Better Auth
     sessions for documents. Account/key management requires bearer keys; root/admin can
     provision accounts. Public signup is disabled. Root NIMMARI_API_KEY can bootstrap

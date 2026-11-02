@@ -2,6 +2,12 @@
 
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-11-02
+
+### Security
+
+- Bump Next.js 16.4.0 → 16.4.3 for the October 2026 Next.js security advisories (remote code execution and denial of service). Self-hosters should pull the 1.4.1 image or redeploy.
+
 ## [1.4.0] - 2026-10-20
 
 ### Added
